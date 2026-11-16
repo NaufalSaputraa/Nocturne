@@ -1,4 +1,5 @@
 pub mod db;
+pub mod extractor;
 pub mod models;
 
 #[tauri::command]
