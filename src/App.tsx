@@ -1,4 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
+import {
+  computeClockTimeMs,
+  getClockAnchor,
+  resetClockAnchorForSeek,
+  setClockAnchor,
+} from './hooks/usePlaybackClock';
+import {
+  isTauriRuntime,
+  subscribeTauriEvents,
+  tauriApi,
+} from './lib/tauri';
 import { Titlebar } from './components/layout/Titlebar';
 import { Sidebar, type NavSection } from './components/layout/Sidebar';
 import { RightPanel } from './components/layout/RightPanel';
@@ -95,19 +106,113 @@ export function App() {
     [history, historyIdx],
   );
 
-  // Smooth local requestAnimationFrame preview clock while playing
+  // Hydrate SQLite session & subscribe to Rust backend events in Tauri runtime
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let unlisten: (() => void) | undefined;
+
+    void (async () => {
+      const [session, feed, liked, offline] = await Promise.all([
+        tauriApi.restoreSession(),
+        tauriApi.getHomeFeed(),
+        tauriApi.listLikedSongs(),
+        tauriApi.listOfflineTracks(),
+      ]);
+
+      if (feed && feed.length > 0) {
+        const likedSet = new Set((liked ?? []).map((t) => t.video_id));
+        const offlineSet = new Set((offline ?? []).map((t) => t.video_id));
+        setTracks(
+          feed.map((t) => ({
+            ...t,
+            album: t.album ?? 'Single',
+            year: new Date().getFullYear(),
+            date_added: 'Today',
+            accentColor: '#F43F5E',
+            liked: likedSet.has(t.video_id),
+            offline: offlineSet.has(t.video_id),
+          })),
+        );
+      }
+
+      if (session) {
+        if (session.current_track) {
+          setActiveTrackId(session.current_track.video_id);
+        }
+        setCurrentTimeMs(session.position_ms);
+        setShuffle(session.shuffle);
+        setRepeatMode(
+          session.repeat_mode === 'all' || session.repeat_mode === 'one'
+            ? session.repeat_mode
+            : 'off',
+        );
+        setAutoplayEnabled(session.autoplay_enabled);
+        setVolume(session.volume);
+        setIsPlaying(false);
+        setClockAnchor({
+          position_ms: session.position_ms,
+          duration_ms: (session.current_track?.duration_sec ?? 0) * 1000,
+          is_playing: false,
+          is_buffering: false,
+          server_ts_ms: Date.now(),
+        });
+      }
+
+      unlisten = await subscribeTauriEvents({
+        onPlaybackSync: (payload) => {
+          setClockAnchor(payload);
+          setIsPlaying(payload.is_playing);
+          setCurrentTimeMs(payload.position_ms);
+        },
+        onTrackChanged: (track) => {
+          if (!track) return;
+          setActiveTrackId(track.video_id);
+          setTracks((prev) =>
+            prev.some((t) => t.video_id === track.video_id)
+              ? prev
+              : [
+                  {
+                    ...track,
+                    album: track.album ?? 'Single',
+                    year: new Date().getFullYear(),
+                    date_added: 'Today',
+                    accentColor: '#F43F5E',
+                    liked: false,
+                    offline: false,
+                  },
+                  ...prev,
+                ],
+          );
+        },
+        onQueueUpdated: ({ queue }) => {
+          setQueueIds(queue.map((t) => t.video_id));
+        },
+      });
+    })();
+
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  // Smooth requestAnimationFrame clock: uses rAF anchor interpolation in Tauri runtime,
+  // and local preview clock in browser/Vitest mode.
   useEffect(() => {
     if (!isPlaying) return;
     let frameId = 0;
     let lastNow = performance.now();
 
     const tick = (now: number) => {
-      const dt = now - lastNow;
-      lastNow = now;
-      setCurrentTimeMs((prev) => {
-        const next = prev + dt;
-        return next >= durationMs ? 0 : next;
-      });
+      if (isTauriRuntime()) {
+        setCurrentTimeMs(computeClockTimeMs(getClockAnchor(), now));
+      } else {
+        const dt = now - lastNow;
+        lastNow = now;
+        setCurrentTimeMs((prev) => {
+          const next = prev + dt;
+          return next >= durationMs ? 0 : next;
+        });
+      }
       frameId = requestAnimationFrame(tick);
     };
 
@@ -155,6 +260,8 @@ export function App() {
     recordTrackPlay(track.video_id);
     setCurrentTimeMs(0);
     setIsPlaying(true);
+    resetClockAnchorForSeek(0);
+    void tauriApi.playTrack(track);
   };
 
   const handlePlayAll = (list: DemoTrack[]) => {
@@ -165,18 +272,49 @@ export function App() {
     setClearedQueueBackup(null);
     setCurrentTimeMs(0);
     setIsPlaying(true);
+    resetClockAnchorForSeek(0);
+    void tauriApi.setQueue(list, 0);
+    void tauriApi.playTrack(list[0]);
   };
 
   const handleToggleLike = (videoId: string) => {
+    const target = tracks.find((t) => t.video_id === videoId);
+    const nextLiked = target ? !target.liked : true;
     setTracks((prev) =>
-      prev.map((t) => (t.video_id === videoId ? { ...t, liked: !t.liked } : t)),
+      prev.map((t) => (t.video_id === videoId ? { ...t, liked: nextLiked } : t)),
     );
+    if (target) {
+      void tauriApi.toggleLikeSong(target, nextLiked);
+    }
   };
 
   const handleToggleOffline = (videoId: string) => {
+    const target = tracks.find((t) => t.video_id === videoId);
+    const nextOffline = target ? !target.offline : true;
     setTracks((prev) =>
-      prev.map((t) => (t.video_id === videoId ? { ...t, offline: !t.offline } : t)),
+      prev.map((t) => (t.video_id === videoId ? { ...t, offline: nextOffline } : t)),
     );
+    if (target) {
+      if (nextOffline) {
+        void tauriApi.downloadTrack(
+          target,
+          settings.audioQuality === 'AAC 128kbps' ? 'aac_128' : 'opus_160',
+        );
+      } else {
+        void tauriApi.removeOfflineTrack(videoId);
+      }
+    }
+  };
+
+  const handleSeek = (posMs: number) => {
+    setCurrentTimeMs(posMs);
+    resetClockAnchorForSeek(posMs);
+    void tauriApi.seekTo(posMs);
+  };
+
+  const handleTogglePlay = () => {
+    setIsPlaying((p) => !p);
+    void tauriApi.togglePlayback();
   };
 
   const handleNext = () => {
@@ -241,17 +379,33 @@ export function App() {
               ? setHistoryIdx(historyIdx - 1)
               : pushRoute({ kind: 'nav', section: 'home' })
           }
-          onTogglePlay={() => setIsPlaying((p) => !p)}
+          onTogglePlay={handleTogglePlay}
           onPrev={handlePrev}
           onNext={handleNext}
-          onToggleShuffle={() => setShuffle((s) => !s)}
+          onToggleShuffle={() => {
+            setShuffle((s) => {
+              const next = !s;
+              void tauriApi.setShuffle(next);
+              return next;
+            });
+          }}
           onCycleRepeat={() =>
-            setRepeatMode((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off'))
+            setRepeatMode((r) => {
+              const next = r === 'off' ? 'all' : r === 'all' ? 'one' : 'off';
+              void tauriApi.setRepeatMode(next);
+              return next;
+            })
           }
           onToggleLike={handleToggleLike}
-          onSeekMs={setCurrentTimeMs}
+          onSeekMs={handleSeek}
           onSelectTrack={handlePlayTrack}
-          onAdjustOffsetMs={(delta) => setLyricOffsetMs((v) => v + delta)}
+          onAdjustOffsetMs={(delta) =>
+            setLyricOffsetMs((v) => {
+              const next = v + delta;
+              void tauriApi.setLyricOffset(currentTrack.video_id, next);
+              return next;
+            })
+          }
         />
         <SettingsModal
           open={settingsOpen}
@@ -436,19 +590,36 @@ export function App() {
         volume={volume}
         muted={muted}
         showRightPanel={showRightPanel}
-        onTogglePlay={() => setIsPlaying((p) => !p)}
+        onTogglePlay={handleTogglePlay}
         onPrev={handlePrev}
         onNext={handleNext}
-        onToggleShuffle={() => setShuffle((s) => !s)}
+        onToggleShuffle={() => {
+          setShuffle((s) => {
+            const next = !s;
+            void tauriApi.setShuffle(next);
+            return next;
+          });
+        }}
         onCycleRepeat={() =>
-          setRepeatMode((r) => (r === 'off' ? 'all' : r === 'all' ? 'one' : 'off'))
+          setRepeatMode((r) => {
+            const next = r === 'off' ? 'all' : r === 'all' ? 'one' : 'off';
+            void tauriApi.setRepeatMode(next);
+            return next;
+          })
         }
-        onSeekMs={setCurrentTimeMs}
+        onSeekMs={handleSeek}
         onVolumeChange={(v) => {
           setVolume(v);
           if (v > 0 && muted) setMuted(false);
+          void tauriApi.setVolume(v);
         }}
-        onToggleMute={() => setMuted((m) => !m)}
+        onToggleMute={() =>
+          setMuted((m) => {
+            const next = !m;
+            void tauriApi.setVolume(next ? 0 : volume);
+            return next;
+          })
+        }
         onToggleLike={handleToggleLike}
         onOpenZenMode={() => pushRoute({ kind: 'lyrics' })}
         onToggleRightPanel={() => setShowRightPanel((v) => !v)}
@@ -458,7 +629,12 @@ export function App() {
         open={settingsOpen}
         settings={settings}
         onClose={() => setSettingsOpen(false)}
-        onSave={setSettings}
+        onSave={(next) => {
+          setSettings(next);
+          void tauriApi.setNormalization(next.normalizeVolume);
+          void tauriApi.setCrossfadeMs(next.crossfadeSec * 1000);
+          void tauriApi.setDiscordRpcEnabled(next.discordRpcEnabled);
+        }}
       />
     </div>
   );

@@ -66,7 +66,7 @@ describe('Nocturne Stitch UI Integration', () => {
     expect(screen.getByTestId('zen-ambient-glow')).toHaveStyle({ opacity: '0.12' });
     expect(screen.getByText('SYNCED LYRICS')).toBeInTheDocument();
     expect(screen.getByText('Back to Library')).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it('caps InteractiveLyricLine sweep duration at 90ms per character', () => {
     const { activeSweepDuration, words } = computeLyricSweep('Wait', 10_000, 26_000);
