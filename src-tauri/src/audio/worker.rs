@@ -3,8 +3,9 @@ use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::audio::engine::{compute_preamp_volume_scale, AudioBackend};
+use crate::db::session::SessionPersistence;
 use crate::extractor::stream::DualTierExtractor;
-use crate::models::{PlaybackSyncPayload, TrackMetadata};
+use crate::models::{PlaybackSession, PlaybackSyncPayload, TrackMetadata};
 
 /// Commands sent from Tauri IPC / SMTC / Tray to the dedicated audio worker actor.
 #[derive(Debug)]
@@ -63,11 +64,43 @@ struct WorkerState {
     crossfade_ms: u64,
     prefetched_for_index: Option<usize>,
     last_buffering: bool,
+    session_persistence: Option<SessionPersistence>,
 }
 
 impl WorkerState {
     fn current_ts_ms() -> i64 {
         chrono::Utc::now().timestamp_millis()
+    }
+
+    fn to_session(&mut self) -> PlaybackSession {
+        let st = self.backend.poll_state();
+        PlaybackSession {
+            current_track: self.current_track.clone(),
+            position_ms: st.position_ms,
+            queue: self.queue.clone(),
+            shuffle: self.shuffle,
+            repeat_mode: self.repeat_mode.clone(),
+            autoplay_enabled: self.autoplay_enabled,
+            volume: self.volume,
+        }
+    }
+
+    async fn maybe_save_session_tick(&mut self) {
+        let session = self.to_session();
+        if let Some(persistence) = &mut self.session_persistence {
+            let _ = persistence
+                .maybe_save_tick(&session, Self::current_ts_ms())
+                .await;
+        }
+    }
+
+    async fn flush_session_now(&mut self) {
+        let session = self.to_session();
+        if let Some(persistence) = &mut self.session_persistence {
+            let _ = persistence
+                .flush_now(&session, Self::current_ts_ms())
+                .await;
+        }
     }
 
     fn emit_sync_now(&mut self) {
@@ -111,10 +144,12 @@ impl WorkerState {
                     .backend
                     .load_and_play(&stream.url, self.preamp_scale, self.volume);
                 self.emit_sync_now();
+                self.flush_session_now().await;
             }
             Err(_) => {
                 let _ = self.backend.stop();
                 self.emit_sync_now();
+                self.flush_session_now().await;
             }
         }
     }
@@ -190,13 +225,26 @@ impl WorkerState {
     }
 }
 
-/// Spawns the dedicated 500ms audio worker actor and returns its command channel.
+/// Spawns the dedicated 500ms audio worker actor without SQLite persistence.
 pub fn spawn_audio_worker(
     backend: Box<dyn AudioBackend>,
     extractor: Arc<DualTierExtractor>,
     sink: Arc<dyn PlaybackEventSink>,
     quality: String,
     initial_volume: f32,
+) -> mpsc::Sender<AudioCommand> {
+    spawn_audio_worker_with_session(backend, extractor, sink, quality, initial_volume, None)
+}
+
+/// Spawns the dedicated 500ms audio worker actor with optional 5s debounced
+/// `SessionPersistence` and immediate event flushes.
+pub fn spawn_audio_worker_with_session(
+    backend: Box<dyn AudioBackend>,
+    extractor: Arc<DualTierExtractor>,
+    sink: Arc<dyn PlaybackEventSink>,
+    quality: String,
+    initial_volume: f32,
+    session_persistence: Option<SessionPersistence>,
 ) -> mpsc::Sender<AudioCommand> {
     let (tx, mut rx) = mpsc::channel::<AudioCommand>(64);
 
@@ -218,6 +266,7 @@ pub fn spawn_audio_worker(
             crossfade_ms: 0,
             prefetched_for_index: None,
             last_buffering: false,
+            session_persistence,
         };
 
         let mut ticker = tokio::time::interval(Duration::from_millis(500));
@@ -233,6 +282,9 @@ pub fn spawn_audio_worker(
                     }
                     if st.is_playing || st.is_buffering != state.last_buffering {
                         state.emit_sync_now();
+                    }
+                    if st.is_playing {
+                        state.maybe_save_session_tick().await;
                     }
                     state.maybe_spawn_prefetch();
                 }
@@ -255,10 +307,12 @@ pub fn spawn_audio_worker(
                             let st = state.backend.poll_state();
                             let _ = state.backend.set_paused(st.is_playing);
                             state.emit_sync_now();
+                            state.flush_session_now().await;
                         }
                         AudioCommand::SeekTo(pos_ms) => {
                             let _ = state.backend.seek_ms(pos_ms);
                             state.emit_sync_now();
+                            state.flush_session_now().await;
                         }
                         AudioCommand::SetVolume(vol) => {
                             state.volume = vol.clamp(0.0, 1.0);
@@ -269,6 +323,7 @@ pub fn spawn_audio_worker(
                             state.current_index = index.min(state.queue.len().saturating_sub(1));
                             state.prefetched_for_index = None;
                             state.sink.emit_queue_updated(state.queue.clone(), state.current_index);
+                            state.flush_session_now().await;
                         }
                         AudioCommand::Next => {
                             state.advance_next(false).await;
@@ -307,6 +362,7 @@ pub fn spawn_audio_worker(
                             });
                         }
                         AudioCommand::Shutdown => {
+                            state.flush_session_now().await;
                             let _ = state.backend.stop();
                             break;
                         }
