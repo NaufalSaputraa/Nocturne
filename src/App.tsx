@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Titlebar } from './components/layout/Titlebar';
 import { Sidebar, type NavSection } from './components/layout/Sidebar';
 import { RightPanel } from './components/layout/RightPanel';
@@ -25,7 +25,15 @@ type ActiveRoute =
   | { kind: 'nav'; section: NavSection }
   | { kind: 'search' }
   | { kind: 'playlist'; playlistId: string }
-  | { kind: 'zen' };
+  | { kind: 'lyrics' };
+
+function routesEqual(a: ActiveRoute, b: ActiveRoute): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'nav' && b.kind === 'nav') return a.section === b.section;
+  if (a.kind === 'playlist' && b.kind === 'playlist')
+    return a.playlistId === b.playlistId;
+  return true;
+}
 
 export function App() {
   const [tracks, setTracks] = useState<DemoTrack[]>(DEMO_TRACKS);
@@ -37,11 +45,17 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [bannerSaved, setBannerSaved] = useState(false);
 
   const [activeTrackId, setActiveTrackId] = useState<string>(DEMO_TRACKS[0].video_id);
+  const [playHistoryIds, setPlayHistoryIds] = useState<string[]>([
+    DEMO_TRACKS[0].video_id,
+    DEMO_TRACKS[1].video_id,
+  ]);
   const [queueIds, setQueueIds] = useState<string[]>(
     DEMO_TRACKS.slice(1, 7).map((t) => t.video_id),
   );
+  const [clearedQueueBackup, setClearedQueueBackup] = useState<string[] | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTimeMs, setCurrentTimeMs] = useState(84_000);
   const [shuffle, setShuffle] = useState(false);
@@ -71,6 +85,16 @@ export function App() {
     .map((id) => tracks.find((t) => t.video_id === id))
     .filter((t): t is DemoTrack => Boolean(t));
 
+  const pushRoute = useCallback(
+    (nextRoute: ActiveRoute) => {
+      if (routesEqual(history[historyIdx], nextRoute)) return;
+      const sliced = history.slice(0, historyIdx + 1);
+      setHistory([...sliced, nextRoute]);
+      setHistoryIdx(sliced.length);
+    },
+    [history, historyIdx],
+  );
+
   // Smooth local requestAnimationFrame preview clock while playing
   useEffect(() => {
     if (!isPlaying) return;
@@ -91,14 +115,44 @@ export function App() {
     return () => cancelAnimationFrame(frameId);
   }, [isPlaying, durationMs]);
 
-  const pushRoute = (nextRoute: ActiveRoute) => {
-    const sliced = history.slice(0, historyIdx + 1);
-    setHistory([...sliced, nextRoute]);
-    setHistoryIdx(sliced.length);
+  // Global keyboard shortcuts (Space, ArrowLeft/Right, M, L)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || settingsOpen) {
+        return;
+      }
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setIsPlaying((p) => !p);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setCurrentTimeMs((prev) => Math.min(durationMs, prev + 5_000));
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setCurrentTimeMs((prev) => Math.max(0, prev - 5_000));
+      } else if (e.key.toLowerCase() === 'm') {
+        setMuted((m) => !m);
+      } else if (e.key.toLowerCase() === 'l') {
+        if (route.kind === 'lyrics') {
+          if (historyIdx > 0) setHistoryIdx(historyIdx - 1);
+        } else {
+          pushRoute({ kind: 'lyrics' });
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [durationMs, historyIdx, pushRoute, route.kind, settingsOpen]);
+
+  const recordTrackPlay = (videoId: string) => {
+    setPlayHistoryIds((prev) => [videoId, ...prev.filter((id) => id !== videoId)]);
   };
 
   const handlePlayTrack = (track: DemoTrack) => {
     setActiveTrackId(track.video_id);
+    recordTrackPlay(track.video_id);
     setCurrentTimeMs(0);
     setIsPlaying(true);
   };
@@ -106,7 +160,9 @@ export function App() {
   const handlePlayAll = (list: DemoTrack[]) => {
     if (list.length === 0) return;
     setActiveTrackId(list[0].video_id);
+    recordTrackPlay(list[0].video_id);
     setQueueIds(list.slice(1).map((t) => t.video_id));
+    setClearedQueueBackup(null);
     setCurrentTimeMs(0);
     setIsPlaying(true);
   };
@@ -127,6 +183,7 @@ export function App() {
     if (queueTracks.length > 0) {
       const [nextTrack, ...rest] = queueTracks;
       setActiveTrackId(nextTrack.video_id);
+      recordTrackPlay(nextTrack.video_id);
       setQueueIds(rest.map((t) => t.video_id));
       setCurrentTimeMs(0);
       setIsPlaying(true);
@@ -154,10 +211,10 @@ export function App() {
       name,
       description:
         source === 'ytm'
-          ? 'Two-way synced with your YouTube Music library.'
-          : 'Stored locally in SQLite.',
+          ? 'Synced with your YouTube Music library.'
+          : 'Saved in your local library.',
       source,
-      curator: source === 'ytm' ? 'YouTube Music Synced' : 'Local SQLite',
+      curator: source === 'ytm' ? 'YouTube Music' : 'Local Library',
       cover_url: tracks[0].thumbnail_url,
       tracks: [currentTrack.video_id],
     };
@@ -165,7 +222,7 @@ export function App() {
     pushRoute({ kind: 'playlist', playlistId: id });
   };
 
-  if (route.kind === 'zen') {
+  if (route.kind === 'lyrics') {
     return (
       <>
         <ZenLyricsView
@@ -218,6 +275,19 @@ export function App() {
       ? playlists.find((p) => p.id === route.playlistId) ?? playlists[0]
       : null;
 
+  const getSectionTracks = (section: NavSection): DemoTrack[] => {
+    if (section === 'liked') return tracks.filter((t) => t.liked);
+    if (section === 'offline') return tracks.filter((t) => t.offline);
+    if (section === 'history') {
+      return playHistoryIds
+        .map((id) => tracks.find((t) => t.video_id === id))
+        .filter((t): t is DemoTrack => Boolean(t));
+    }
+    if (section === 'explore') return tracks.slice(4);
+    if (section === 'trending') return [...tracks].reverse();
+    return tracks;
+  };
+
   return (
     <div className="h-screen w-screen bg-[#121212] text-[#FAFAFA] flex flex-col overflow-hidden">
       <Titlebar
@@ -259,10 +329,12 @@ export function App() {
               artists={DEMO_ARTISTS}
               playlists={playlists}
               onPlayTrack={handlePlayTrack}
+              onPlayAll={handlePlayAll}
               onToggleLike={handleToggleLike}
               onSelectPlaylist={(playlistId) =>
                 pushRoute({ kind: 'playlist', playlistId })
               }
+              onClearSearch={() => setSearchQuery('')}
             />
           )}
 
@@ -309,19 +381,15 @@ export function App() {
                       ? 'Offline Downloads'
                       : route.section.charAt(0).toUpperCase() + route.section.slice(1)
               }
-              tracks={
-                route.section === 'liked'
-                  ? tracks.filter((t) => t.liked)
-                  : route.section === 'offline'
-                    ? tracks.filter((t) => t.offline)
-                    : tracks
-              }
+              tracks={getSectionTracks(route.section)}
               albums={DEMO_ALBUMS}
               playlists={playlists}
               activeTrackId={activeTrackId}
+              bannerSaved={bannerSaved}
               initialFilter={route.section === 'offline' ? 'Offline' : 'All'}
               onPlayTrack={handlePlayTrack}
               onPlayAll={handlePlayAll}
+              onToggleSaveBanner={() => setBannerSaved((v) => !v)}
               onToggleLike={handleToggleLike}
               onToggleOffline={handleToggleOffline}
               onSelectPlaylist={(playlistId) =>
@@ -335,15 +403,25 @@ export function App() {
           <RightPanel
             currentTrack={currentTrack}
             queue={queueTracks}
+            canUndoClear={clearedQueueBackup !== null}
             autoplayEnabled={autoplayEnabled}
             currentTimeMs={currentTimeMs}
             lyrics={DEMO_ZEN_LYRICS}
             onToggleAutoplay={() => setAutoplayEnabled((v) => !v)}
-            onClearQueue={() => setQueueIds([])}
+            onClearQueue={() => {
+              setClearedQueueBackup(queueIds);
+              setQueueIds([]);
+            }}
+            onUndoClearQueue={() => {
+              if (clearedQueueBackup) {
+                setQueueIds(clearedQueueBackup);
+                setClearedQueueBackup(null);
+              }
+            }}
             onSelectTrack={handlePlayTrack}
             onToggleLike={handleToggleLike}
             onSeekMs={setCurrentTimeMs}
-            onOpenZenMode={() => pushRoute({ kind: 'zen' })}
+            onOpenLyricsView={() => pushRoute({ kind: 'lyrics' })}
           />
         )}
       </div>
@@ -372,7 +450,7 @@ export function App() {
         }}
         onToggleMute={() => setMuted((m) => !m)}
         onToggleLike={handleToggleLike}
-        onOpenZenMode={() => pushRoute({ kind: 'zen' })}
+        onOpenZenMode={() => pushRoute({ kind: 'lyrics' })}
         onToggleRightPanel={() => setShowRightPanel((v) => !v)}
       />
 

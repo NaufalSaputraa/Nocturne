@@ -6,6 +6,7 @@ import {
   Pause,
   Play,
   Repeat,
+  Repeat1,
   Shuffle,
   SkipBack,
   SkipForward,
@@ -147,7 +148,7 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
           <button
             type="button"
             onClick={onCycleRepeat}
-            aria-label="Repeat"
+            aria-label={`Repeat: ${repeatMode}`}
             title={`Repeat: ${repeatMode}`}
             className={`relative transition-colors ${
               repeatMode !== 'off'
@@ -155,7 +156,11 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
                 : 'text-[#71717A] hover:text-[#FAFAFA]'
             }`}
           >
-            <Repeat className="w-[17px] h-[17px]" />
+            {repeatMode === 'one' ? (
+              <Repeat1 className="w-[17px] h-[17px]" />
+            ) : (
+              <Repeat className="w-[17px] h-[17px]" />
+            )}
             {repeatMode !== 'off' && (
               <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#F43F5E] rounded-full" />
             )}
@@ -168,12 +173,22 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
           </span>
           <div
             onClick={handleBarSeek}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                onSeekMs(Math.min(durationMs, currentTimeMs + 5_000));
+              } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                onSeekMs(Math.max(0, currentTimeMs - 5_000));
+              }
+            }}
+            tabIndex={0}
             role="slider"
             aria-label="Seek position"
             aria-valuemin={0}
             aria-valuemax={durationMs}
             aria-valuenow={Math.round(currentTimeMs)}
-            className="flex-1 h-1.5 bg-[#27272A] rounded-full overflow-hidden relative cursor-pointer group"
+            className="flex-1 h-1.5 bg-[#27272A] rounded-full overflow-hidden relative cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60"
           >
             <div
               className="h-full bg-[#FAFAFA] group-hover:bg-[#F43F5E] transition-colors rounded-full"

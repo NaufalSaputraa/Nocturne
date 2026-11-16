@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   AudioLines,
   CheckCircle2,
+  ChevronDown,
   Folder,
   Palette,
   RefreshCw,
@@ -13,27 +14,6 @@ import {
   InteractiveDropdown,
   type DropdownOption,
 } from '../ui/InteractiveDropdown';
-
-const QUALITY_OPTIONS: DropdownOption[] = [
-  {
-    value: 'Opus 160kbps',
-    label: 'High • Opus 160 kbps',
-    badge: '48kHz VBR',
-    description: 'Recommended balance of transparency and instant stream start.',
-  },
-  {
-    value: 'M4A 256kbps',
-    label: 'AAC High • M4A 256 kbps',
-    badge: 'AAC-LC',
-    description: 'Maximum compatibility for offline downloads and external players.',
-  },
-  {
-    value: 'Opus 128kbps',
-    label: 'Data Saver • Opus 128 kbps',
-    badge: 'Low BW',
-    description: 'Faster buffering on metered or slow connections.',
-  },
-];
 
 export type SettingsTab = 'audio' | 'storage' | 'engine' | 'account';
 
@@ -55,6 +35,27 @@ export interface SettingsModalProps {
   onSave: (next: NocturneSettings) => void;
 }
 
+const QUALITY_OPTIONS: DropdownOption[] = [
+  {
+    value: 'Opus 160kbps',
+    label: 'High • Opus 160 kbps',
+    badge: '48kHz VBR',
+    description: 'Recommended balance of clarity and instant stream start.',
+  },
+  {
+    value: 'M4A 256kbps',
+    label: 'AAC High • M4A 256 kbps',
+    badge: 'AAC-LC',
+    description: 'Maximum compatibility for offline downloads.',
+  },
+  {
+    value: 'Opus 128kbps',
+    label: 'Data Saver • Opus 128 kbps',
+    badge: 'Low BW',
+    description: 'Faster buffering on slower connections.',
+  },
+];
+
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   open,
   settings,
@@ -63,10 +64,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [tab, setTab] = useState<SettingsTab>('audio');
   const [draft, setDraft] = useState<NocturneSettings>(settings);
+  const [cacheUsedGb, setCacheUsedGb] = useState(1.4);
+  const [cacheNotice, setCacheNotice] = useState<string | null>(null);
   const [ytdlpStatus, setYtdlpStatus] = useState('Up to date • v2026.11.12');
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   useEffect(() => {
     setDraft(settings);
+    setCacheNotice(null);
   }, [settings, open]);
 
   useEffect(() => {
@@ -79,6 +84,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [open, onClose]);
 
   if (!open) return null;
+
+  const usagePct =
+    draft.lruLimitGb > 0
+      ? Math.min(100, Math.round((cacheUsedGb / draft.lruLimitGb) * 100))
+      : 0;
 
   const navBtn = (id: SettingsTab, label: string, Icon: React.ElementType) => (
     <button
@@ -108,7 +118,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-center justify-center p-4"
     >
       <div className="w-[700px] max-w-full h-[540px] max-h-[85vh] bg-[#18181B] border border-[#27272A] rounded-2xl flex overflow-hidden select-none">
-        {/* Left Navigation Sidebar (190px) */}
         <aside className="w-[196px] shrink-0 bg-[#121212] border-r border-[#27272A] p-4 flex flex-col justify-between">
           <div className="flex flex-col gap-5">
             <div className="flex items-center gap-2 px-1">
@@ -122,7 +131,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {navBtn('audio', 'Audio & Playback', SlidersHorizontal)}
               {navBtn('storage', 'Storage & Cache', Folder)}
               {navBtn('engine', 'Engine & Discord', Terminal)}
-              {navBtn('account', 'Account & Theme', Palette)}
+              {navBtn('account', 'Account & Shortcuts', Palette)}
             </nav>
           </div>
 
@@ -135,18 +144,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </aside>
 
-        {/* Right Scrollable Settings Content */}
         <section className="flex-1 p-6 flex flex-col justify-between overflow-hidden bg-[#18181B]">
           <div className="flex items-center justify-between pb-4 border-b border-[#27272A] shrink-0">
             <div>
               <h3 className="text-base font-semibold text-[#FAFAFA]">
                 {tab === 'audio' && 'Audio & Playback'}
-                {tab === 'storage' && 'Storage, LRU Cache & Offline'}
-                {tab === 'engine' && 'Backend Engine & Discord RPC'}
-                {tab === 'account' && 'YouTube Music Account & Theme'}
+                {tab === 'storage' && 'Storage, Cache & Offline'}
+                {tab === 'engine' && 'Playback Engine & Discord'}
+                {tab === 'account' && 'YouTube Music & Shortcuts'}
               </h3>
               <p className="text-xs text-[#71717A]">
-                Configure native Rust decoding, caching, sync, and integrations
+                Configure audio quality, caching, account sync, and shortcuts
               </p>
             </div>
             <button
@@ -178,7 +186,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       Normalize Volume
                     </p>
                     <p className="text-xs text-[#71717A]">
-                      Static pre-amp gain using YouTube perceptualLoudnessDb metadata
+                      Balance volume levels automatically across tracks
                     </p>
                   </div>
                   <button
@@ -205,10 +213,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="text-sm font-medium text-[#FAFAFA]">
-                        Sequential Crossfade
+                        Track Fade Transition
                       </span>
                       <span className="text-xs text-[#71717A] ml-2">
-                        (Gapless + fade-out/in)
+                        (Gapless + smooth fade)
                       </span>
                     </div>
                     <span className="text-xs font-mono tabular-nums bg-[#222226] text-[#FAFAFA] px-2 py-0.5 rounded">
@@ -232,13 +240,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {tab === 'storage' && (
               <>
-                <div className="p-3.5 rounded-xl bg-[#121212] border border-[#27272A] flex flex-col gap-2.5">
+                <div className="p-3.5 rounded-xl bg-[#121212] border border-[#27272A] flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-[#FAFAFA]">
-                      Automatic LRU Stream Cache
+                      Playback Stream Cache
                     </span>
                     <button
                       type="button"
+                      onClick={() => {
+                        setCacheUsedGb(0);
+                        setCacheNotice('Playback cache cleared.');
+                      }}
                       className="text-xs text-[#F43F5E] hover:underline whitespace-nowrap"
                     >
                       Clear Cache
@@ -250,20 +262,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={(e) =>
                       setDraft({ ...draft, lruCachePath: e.target.value })
                     }
+                    aria-label="Stream cache folder path"
                     className="bg-[#18181B] border border-[#27272A] rounded-lg px-3 py-1.5 text-xs font-mono text-[#A1A1AA] outline-none"
                   />
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[#A1A1AA]">Cache Size Limit</span>
+                    <span className="font-mono tabular-nums text-[#FAFAFA]">
+                      {draft.lruLimitGb.toFixed(1)} GB
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={20}
+                    step={0.5}
+                    value={draft.lruLimitGb}
+                    onChange={(e) =>
+                      setDraft({ ...draft, lruLimitGb: Number(e.target.value) })
+                    }
+                    aria-label="Cache Size Limit"
+                    className="w-full accent-[#F43F5E] cursor-pointer"
+                  />
                   <div className="flex items-center justify-between text-[11px] text-[#71717A] font-mono tabular-nums">
-                    <span>1.4 GB used of {draft.lruLimitGb.toFixed(1)} GB LRU limit</span>
-                    <span>28%</span>
+                    <span>
+                      {cacheUsedGb.toFixed(1)} GB used of {draft.lruLimitGb.toFixed(1)} GB limit
+                    </span>
+                    <span>{usagePct}%</span>
                   </div>
                   <div className="w-full h-1.5 bg-[#27272A] rounded-full overflow-hidden">
-                    <div className="h-full bg-[#FAFAFA] w-[28%] rounded-full" />
+                    <div
+                      className="h-full bg-[#FAFAFA] rounded-full transition-all"
+                      style={{ width: `${usagePct}%` }}
+                    />
                   </div>
+                  {cacheNotice && (
+                    <p className="text-[11px] text-emerald-400">{cacheNotice}</p>
+                  )}
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-[#121212] border border-[#27272A] flex flex-col gap-2">
                   <span className="text-xs font-medium text-[#FAFAFA]">
-                    Explicit Offline Downloads Folder
+                    Offline Downloads Folder
                   </span>
                   <input
                     type="text"
@@ -271,10 +310,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={(e) =>
                       setDraft({ ...draft, offlineDownloadsPath: e.target.value })
                     }
+                    aria-label="Offline downloads folder path"
                     className="bg-[#18181B] border border-[#27272A] rounded-lg px-3 py-1.5 text-xs font-mono text-[#A1A1AA] outline-none"
                   />
                   <p className="text-[11px] text-[#71717A]">
-                    Tracks downloaded via the Download button are never evicted by LRU.
+                    Explicitly downloaded tracks stay saved even when the stream cache rotates.
                   </p>
                 </div>
               </>
@@ -285,11 +325,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="p-3.5 rounded-xl bg-[#121212] border border-[#27272A] flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-[#FAFAFA]">
-                      Primary Extractor: rustypipe Native
+                      Instant Native Stream Engine
                     </p>
                     <p className="text-xs text-emerald-400 flex items-center gap-1 mt-0.5">
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Active • &lt; 250 ms Innertube extraction</span>
+                      <span>Active • Ready for low-latency playback</span>
                     </p>
                   </div>
                 </div>
@@ -297,7 +337,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="p-3.5 rounded-xl bg-[#121212] border border-[#27272A] flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-[#FAFAFA]">
-                      Fallback Engine: yt-dlp Sidecar
+                      Backup Extractor (yt-dlp)
                     </p>
                     <p className="text-xs text-emerald-400 mt-0.5">{ytdlpStatus}</p>
                   </div>
@@ -342,6 +382,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                   </button>
                 </div>
+
+                {/* Collapsible technical telemetry for power users */}
+                <div className="rounded-xl bg-[#121212] border border-[#27272A] overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowDiagnostics((v) => !v)}
+                    className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-medium text-[#A1A1AA] hover:text-white"
+                  >
+                    <span>Engine Diagnostics</span>
+                    <ChevronDown
+                      className={`w-4 h-4 transition-transform ${
+                        showDiagnostics ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+                  {showDiagnostics && (
+                    <div className="px-3.5 pb-3 pt-1 text-[11px] font-mono text-[#71717A] space-y-1 border-t border-[#27272A]">
+                      <p>Primary extractor: rustypipe (&lt; 250 ms Innertube)</p>
+                      <p>Fallback sidecar: yt-dlp (5.5h stream URL cache)</p>
+                      <p>Loudness: static pre-amp via perceptualLoudnessDb</p>
+                      <p>Storage: SQLite WAL + 5s debounced session restore</p>
+                    </div>
+                  )}
+                </div>
               </>
             )}
 
@@ -350,12 +414,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="p-4 rounded-xl bg-[#121212] border border-[#27272A] flex items-center justify-between gap-4">
                   <div>
                     <p className="text-sm font-medium text-[#FAFAFA]">
-                      YouTube Music Account (Two-Way Sync)
+                      YouTube Music Account
                     </p>
                     <p className="text-xs text-[#71717A] mt-0.5">
                       {draft.ytmConnected
-                        ? 'Connected — Likes and YTM playlists sync bidirectionally.'
-                        : 'Local-only mode active. Connect YTM to sync Likes & playlists.'}
+                        ? 'Connected — Likes and YouTube Music playlists stay in sync.'
+                        : 'Local-only mode. Connect your account to sync Likes & playlists.'}
                     </p>
                   </div>
                   <button
@@ -369,23 +433,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         : 'bg-white text-black'
                     }`}
                   >
-                    {draft.ytmConnected ? 'Disconnect YTM' : 'Connect YTM Account'}
+                    {draft.ytmConnected ? 'Disconnect' : 'Connect Account'}
                   </button>
                 </div>
 
                 <div className="p-4 rounded-xl bg-[#121212] border border-[#27272A]">
-                  <p className="text-sm font-medium text-[#FAFAFA]">
-                    Theme: Warm Dark Charcoal (60-30-10)
+                  <p className="text-sm font-medium text-[#FAFAFA] mb-2.5">
+                    Keyboard Shortcuts
                   </p>
-                  <p className="text-xs text-[#71717A] mt-1">
-                    Canvas `#121212`, Surface `#18181B`, Accent `#FFFFFF` / `#F43F5E`
-                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center justify-between text-[#A1A1AA]">
+                      <span>Search</span>
+                      <kbd className="px-1.5 py-0.5 rounded bg-[#222226] text-[#FAFAFA] font-mono text-[11px]">
+                        Ctrl K
+                      </kbd>
+                    </div>
+                    <div className="flex items-center justify-between text-[#A1A1AA]">
+                      <span>Play / Pause</span>
+                      <kbd className="px-1.5 py-0.5 rounded bg-[#222226] text-[#FAFAFA] font-mono text-[11px]">
+                        Space
+                      </kbd>
+                    </div>
+                    <div className="flex items-center justify-between text-[#A1A1AA]">
+                      <span>Seek ±5s</span>
+                      <kbd className="px-1.5 py-0.5 rounded bg-[#222226] text-[#FAFAFA] font-mono text-[11px]">
+                        ← / →
+                      </kbd>
+                    </div>
+                    <div className="flex items-center justify-between text-[#A1A1AA]">
+                      <span>Toggle Lyrics</span>
+                      <kbd className="px-1.5 py-0.5 rounded bg-[#222226] text-[#FAFAFA] font-mono text-[11px]">
+                        L
+                      </kbd>
+                    </div>
+                    <div className="flex items-center justify-between text-[#A1A1AA]">
+                      <span>Mute</span>
+                      <kbd className="px-1.5 py-0.5 rounded bg-[#222226] text-[#FAFAFA] font-mono text-[11px]">
+                        M
+                      </kbd>
+                    </div>
+                  </div>
                 </div>
               </>
             )}
           </div>
 
-          {/* Footer Buttons */}
           <div className="pt-4 border-t border-[#27272A] flex items-center justify-end gap-2.5 shrink-0">
             <button
               type="button"

@@ -23,9 +23,11 @@ export interface HomeViewProps {
   albums: DemoAlbum[];
   playlists: DemoPlaylist[];
   activeTrackId: string;
+  bannerSaved: boolean;
   initialFilter?: HomeFilter;
   onPlayTrack: (track: DemoTrack) => void;
   onPlayAll: (tracks: DemoTrack[]) => void;
+  onToggleSaveBanner: () => void;
   onToggleLike: (videoId: string) => void;
   onToggleOffline: (videoId: string) => void;
   onSelectPlaylist: (id: string) => void;
@@ -39,18 +41,28 @@ export const HomeView: React.FC<HomeViewProps> = ({
   albums,
   playlists,
   activeTrackId,
+  bannerSaved,
   initialFilter = 'All',
   onPlayTrack,
   onPlayAll,
+  onToggleSaveBanner,
   onToggleLike,
   onToggleOffline,
   onSelectPlaylist,
 }) => {
   const [filter, setFilter] = useState<HomeFilter>(initialFilter);
-  const [bannerSaved, setBannerSaved] = useState(false);
 
   const visibleTracks =
     filter === 'Offline' ? tracks.filter((t) => t.offline) : tracks;
+
+  const playAlbumTracks = (album: DemoAlbum) => {
+    const matched = tracks.filter(
+      (t) =>
+        t.album.toLowerCase() === album.title.toLowerCase() ||
+        t.artist.toLowerCase() === album.artist.toLowerCase(),
+    );
+    onPlayAll(matched.length > 0 ? matched : tracks);
+  };
 
   return (
     <div className="flex flex-col w-full gap-6">
@@ -69,7 +81,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               key={pill}
               type="button"
               onClick={() => setFilter(pill)}
-              className={`px-4 py-1.5 rounded-full text-sm transition-colors whitespace-nowrap shrink-0 ${
+              className={`px-4 py-1.5 rounded-full text-sm transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 ${
                 active
                   ? 'bg-white text-black font-semibold'
                   : 'bg-[#18181B] border border-[#27272A] text-[#A1A1AA] hover:text-white hover:bg-[#222226] font-medium'
@@ -112,7 +124,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setBannerSaved((prev) => !prev)}
+                onClick={onToggleSaveBanner}
                 className="h-9 px-4 rounded-full border border-[#3F3F46] text-[#FAFAFA] font-medium text-sm inline-flex items-center gap-2 hover:bg-[#222226] transition-colors whitespace-nowrap shrink-0"
               >
                 {bannerSaved ? (
@@ -127,14 +139,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </section>
       )}
 
-      {/* Albums Grid when Albums filter is selected */}
+      {/* Albums Grid */}
       {filter === 'Albums' && (
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {albums.map((album) => (
             <div
               key={album.id}
-              onClick={() => onPlayAll(tracks)}
-              className="bg-[#18181B] border border-[#27272A] rounded-xl p-3.5 hover:bg-[#222226] transition-colors cursor-pointer group"
+              role="button"
+              tabIndex={0}
+              onClick={() => playAlbumTracks(album)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  playAlbumTracks(album);
+                }
+              }}
+              className="bg-[#18181B] border border-[#27272A] rounded-xl p-3.5 hover:bg-[#222226] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 transition-colors cursor-pointer group"
             >
               <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-[#27272A] mb-3">
                 <img
@@ -154,7 +174,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </section>
       )}
 
-      {/* Playlists Grid when Playlists filter is selected */}
+      {/* Playlists Grid */}
       {filter === 'Playlists' && (
         <section className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {playlists.map((pl) => (
@@ -162,7 +182,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               key={pl.id}
               type="button"
               onClick={() => onSelectPlaylist(pl.id)}
-              className="bg-[#18181B] border border-[#27272A] rounded-xl p-4 hover:bg-[#222226] transition-colors text-left flex items-center gap-4"
+              className="bg-[#18181B] border border-[#27272A] rounded-xl p-4 hover:bg-[#222226] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 transition-colors text-left flex items-center gap-4"
             >
               <img
                 src={pl.cover_url}
@@ -171,7 +191,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               />
               <div className="min-w-0">
                 <span className="text-[10px] uppercase tracking-wider font-semibold text-[#F43F5E]">
-                  {pl.source === 'ytm' ? 'YTM Synced' : 'Local SQLite'}
+                  {pl.source === 'ytm' ? 'YouTube Music' : 'Local Library'}
                 </span>
                 <h3 className="text-sm font-semibold text-[#FAFAFA] truncate">
                   {pl.name}
@@ -188,124 +208,164 @@ export const HomeView: React.FC<HomeViewProps> = ({
       {/* Clean Tracklist Table */}
       {(filter === 'All' || filter === 'Songs' || filter === 'Offline') && (
         <div className="w-full">
-          <div className="grid grid-cols-12 gap-4 px-4 py-2 text-xs font-semibold text-[#71717A] uppercase tracking-wider border-b border-[#27272A] select-none">
-            <div className="col-span-1 flex items-center">#</div>
-            <div className="col-span-5 flex items-center whitespace-nowrap">Title</div>
-            <div className="col-span-3 flex items-center whitespace-nowrap">Album</div>
-            <div className="col-span-1 flex items-center justify-center whitespace-nowrap">
-              Offline
-            </div>
-            <div className="col-span-1 flex items-center justify-center">
-              <Heart className="w-4 h-4" />
-            </div>
-            <div className="col-span-1 flex items-center justify-end">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-
-          <div className="divide-y divide-[#27272A]/40">
-            {visibleTracks.map((track, idx) => {
-              const isActive = track.video_id === activeTrackId;
-              return (
-                <div
-                  key={track.video_id}
-                  onClick={() => onPlayTrack(track)}
-                  className={`grid grid-cols-12 gap-4 px-4 h-[52px] items-center rounded-lg transition-colors cursor-pointer group ${
-                    isActive
-                      ? 'bg-[#1E1E22]'
-                      : 'hover:bg-[#222226]'
-                  }`}
+          {visibleTracks.length === 0 ? (
+            <div className="rounded-2xl bg-[#18181B] border border-[#27272A] p-10 text-center flex flex-col items-center gap-3">
+              <p className="text-sm font-medium text-[#FAFAFA]">
+                No tracks here yet
+              </p>
+              <p className="text-xs text-[#71717A] max-w-sm">
+                {filter === 'Offline'
+                  ? 'Download tracks from any playlist or library list to play them offline.'
+                  : 'Play or like songs to populate this list.'}
+              </p>
+              {filter !== 'All' && (
+                <button
+                  type="button"
+                  onClick={() => setFilter('All')}
+                  className="px-4 py-1.5 rounded-full bg-white text-black text-xs font-semibold hover:bg-[#E4E4E7] whitespace-nowrap"
                 >
-                  <div className="col-span-1 flex items-center">
-                    {isActive ? (
-                      <div className="flex items-end gap-[3px] h-3.5 w-3.5" aria-label="Playing">
-                        <span className="w-[3px] bg-[#F43F5E] h-full animate-pulse rounded-full" />
-                        <span className="w-[3px] bg-[#F43F5E] h-2/3 animate-pulse rounded-full" />
-                        <span className="w-[3px] bg-[#F43F5E] h-4/5 animate-pulse rounded-full" />
-                      </div>
-                    ) : (
-                      <>
-                        <span className="text-xs font-medium text-[#71717A] tabular-nums group-hover:hidden">
-                          {idx + 1}
-                        </span>
-                        <Play className="w-4 h-4 text-white fill-current hidden group-hover:block" />
-                      </>
-                    )}
-                  </div>
+                  Show All Tracks
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-12 gap-4 px-4 py-2 text-xs font-semibold text-[#71717A] uppercase tracking-wider border-b border-[#27272A] select-none">
+                <div className="col-span-1 flex items-center">#</div>
+                <div className="col-span-5 flex items-center whitespace-nowrap">Title</div>
+                <div className="col-span-3 flex items-center whitespace-nowrap">Album</div>
+                <div className="col-span-1 flex items-center justify-center whitespace-nowrap">
+                  Offline
+                </div>
+                <div className="col-span-1 flex items-center justify-center">
+                  <Heart className="w-4 h-4" />
+                </div>
+                <div className="col-span-1 flex items-center justify-end">
+                  <Clock className="w-4 h-4" />
+                </div>
+              </div>
 
-                  <div className="col-span-5 flex items-center gap-3 min-w-0">
-                    <img
-                      src={track.thumbnail_url}
-                      alt={track.title}
-                      className="w-9 h-9 rounded-md aspect-square object-cover shrink-0"
-                    />
-                    <div className="flex flex-col min-w-0">
-                      <span
-                        className={`text-sm font-medium truncate ${
-                          isActive ? 'text-[#F43F5E]' : 'text-[#FAFAFA]'
+              <div className="divide-y divide-[#27272A]/40">
+                {visibleTracks.map((track, idx) => {
+                  const isActive = track.video_id === activeTrackId;
+                  return (
+                    <div
+                      key={track.video_id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onPlayTrack(track)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onPlayTrack(track);
+                        }
+                      }}
+                      className={`grid grid-cols-12 gap-4 px-4 h-[52px] items-center rounded-lg transition-colors cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 ${
+                        isActive ? 'bg-[#1E1E22]' : 'hover:bg-[#222226]'
+                      }`}
+                    >
+                      <div className="col-span-1 flex items-center">
+                        {isActive ? (
+                          <div
+                            className="flex items-end gap-[3px] h-3.5 w-3.5"
+                            aria-label="Playing"
+                          >
+                            <span className="w-[3px] bg-[#F43F5E] h-full animate-pulse rounded-full" />
+                            <span className="w-[3px] bg-[#F43F5E] h-2/3 animate-pulse rounded-full" />
+                            <span className="w-[3px] bg-[#F43F5E] h-4/5 animate-pulse rounded-full" />
+                          </div>
+                        ) : (
+                          <>
+                            <span className="text-xs font-medium text-[#71717A] tabular-nums group-hover:hidden">
+                              {idx + 1}
+                            </span>
+                            <Play className="w-4 h-4 text-white fill-current hidden group-hover:block" />
+                          </>
+                        )}
+                      </div>
+
+                      <div className="col-span-5 flex items-center gap-3 min-w-0">
+                        <img
+                          src={track.thumbnail_url}
+                          alt={track.title}
+                          className="w-9 h-9 rounded-md aspect-square object-cover shrink-0"
+                        />
+                        <div className="flex flex-col min-w-0">
+                          <span
+                            className={`text-sm font-medium truncate ${
+                              isActive ? 'text-[#F43F5E]' : 'text-[#FAFAFA]'
+                            }`}
+                          >
+                            {track.title}
+                          </span>
+                          <span className="text-xs text-[#A1A1AA] truncate">
+                            {track.artist}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="col-span-3 text-sm text-[#A1A1AA] truncate">
+                        {track.album}
+                      </div>
+
+                      <div className="col-span-1 flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleOffline(track.video_id);
+                          }}
+                          aria-label={
+                            track.offline
+                              ? `Remove ${track.title} from offline`
+                              : `Download ${track.title} for offline`
+                          }
+                          title={
+                            track.offline ? 'Available Offline' : 'Download for Offline'
+                          }
+                          className={`p-1 rounded transition-colors ${
+                            track.offline
+                              ? 'text-emerald-400'
+                              : 'text-[#52525B] hover:text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100'
+                          }`}
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="col-span-1 flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleLike(track.video_id);
+                          }}
+                          aria-label={`Like ${track.title}`}
+                          className={`transition-transform hover:scale-110 ${
+                            track.liked
+                              ? 'text-[#F43F5E]'
+                              : 'text-[#52525B] hover:text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100'
+                          }`}
+                        >
+                          <Heart
+                            className={`w-4 h-4 ${track.liked ? 'fill-[#F43F5E]' : ''}`}
+                          />
+                        </button>
+                      </div>
+
+                      <div
+                        className={`col-span-1 flex items-center justify-end text-xs font-mono tabular-nums ${
+                          isActive ? 'text-[#F43F5E] font-medium' : 'text-[#71717A]'
                         }`}
                       >
-                        {track.title}
-                      </span>
-                      <span className="text-xs text-[#A1A1AA] truncate">
-                        {track.artist}
-                      </span>
+                        {formatTimeSec(track.duration_sec)}
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="col-span-3 text-sm text-[#A1A1AA] truncate">
-                    {track.album}
-                  </div>
-
-                  <div className="col-span-1 flex items-center justify-center">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleOffline(track.video_id);
-                      }}
-                      title={track.offline ? 'Available Offline' : 'Download for Offline'}
-                      className={`p-1 rounded transition-colors ${
-                        track.offline
-                          ? 'text-emerald-400'
-                          : 'text-[#52525B] hover:text-white opacity-0 group-hover:opacity-100'
-                      }`}
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="col-span-1 flex items-center justify-center">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleLike(track.video_id);
-                      }}
-                      aria-label={`Like ${track.title}`}
-                      className={`transition-transform hover:scale-110 ${
-                        track.liked
-                          ? 'text-[#F43F5E]'
-                          : 'text-[#52525B] hover:text-white opacity-0 group-hover:opacity-100'
-                      }`}
-                    >
-                      <Heart
-                        className={`w-4 h-4 ${track.liked ? 'fill-[#F43F5E]' : ''}`}
-                      />
-                    </button>
-                  </div>
-
-                  <div
-                    className={`col-span-1 flex items-center justify-end text-xs font-mono tabular-nums ${
-                      isActive ? 'text-[#F43F5E] font-medium' : 'text-[#71717A]'
-                    }`}
-                  >
-                    {formatTimeSec(track.duration_sec)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

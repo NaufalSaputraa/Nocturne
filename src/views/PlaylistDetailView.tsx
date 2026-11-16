@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowUpDown,
   BadgeCheck,
@@ -7,6 +7,7 @@ import {
   Heart,
   LayoutGrid,
   List,
+  MoreHorizontal,
   Pencil,
   Play,
   Search,
@@ -61,7 +62,16 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
   const [layoutMode, setLayoutMode] = useState<'list' | 'grid'>('list');
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(playlist.name);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+
+  useEffect(() => {
+    setDraftName(playlist.name);
+    setEditingName(false);
+    setMenuOpen(false);
+    setConfirmDelete(false);
+  }, [playlist.id, playlist.name]);
 
   const filtered = tracks
     .filter(
@@ -84,8 +94,11 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
       : `${totalMins} min`;
 
   const handleDownloadPlaylist = () => {
-    onDownloadAll(tracks);
-    setDownloadProgress(100);
+    setDownloadProgress(45);
+    setTimeout(() => {
+      onDownloadAll(tracks);
+      setDownloadProgress(100);
+    }, 180);
   };
 
   return (
@@ -102,7 +115,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
 
         <div className="flex flex-col justify-center min-w-0 flex-1">
           <span className="text-[11px] uppercase font-semibold tracking-wider text-[#A1A1AA] mb-1.5 whitespace-nowrap">
-            {playlist.source === 'ytm' ? 'YTM Synced Playlist' : 'Local SQLite Playlist'}
+            {playlist.source === 'ytm' ? 'YouTube Music Playlist' : 'Local Playlist'}
           </span>
 
           {editingName ? (
@@ -129,6 +142,13 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
               >
                 Save
               </button>
+              <button
+                type="button"
+                onClick={() => setEditingName(false)}
+                className="px-3 py-1.5 rounded-lg bg-[#222226] text-[#A1A1AA] text-xs font-medium whitespace-nowrap"
+              >
+                Cancel
+              </button>
             </form>
           ) : (
             <h1 className="text-4xl font-bold text-white tracking-tight truncate">
@@ -145,7 +165,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
             <span className="text-[#71717A]">•</span>
             <span className="text-[#F43F5E] font-medium inline-flex items-center gap-1 whitespace-nowrap">
               <BadgeCheck className="w-3.5 h-3.5" />
-              {playlist.curator}
+              {playlist.source === 'ytm' ? 'YouTube Music' : 'Local Library'}
             </span>
             <span className="text-[#71717A]">•</span>
             <span className="whitespace-nowrap">{tracks.length} songs</span>
@@ -155,7 +175,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-3 mt-4 flex-wrap">
+          <div className="flex items-center gap-3 mt-4 flex-wrap relative">
             <button
               type="button"
               onClick={() => onPlayAll(tracks)}
@@ -181,31 +201,82 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
               className="h-9 px-3.5 rounded-full bg-[#18181B] border border-[#27272A] hover:bg-[#222226] flex items-center gap-1.5 text-xs font-medium text-[#FAFAFA] transition-colors whitespace-nowrap"
             >
               <Download className="w-4 h-4 text-emerald-400" />
-              <span>{downloadProgress === 100 ? 'Downloaded' : 'Download'}</span>
+              <span className="tabular-nums">
+                {downloadProgress === null
+                  ? 'Download'
+                  : downloadProgress < 100
+                    ? `Downloading ${downloadProgress}%`
+                    : 'Downloaded'}
+              </span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setDraftName(playlist.name);
-                setEditingName(true);
-              }}
-              aria-label="Rename playlist"
-              title="Rename playlist"
-              className="w-9 h-9 rounded-full bg-[#18181B] border border-[#27272A] hover:bg-[#222226] flex items-center justify-center text-[#A1A1AA] hover:text-white transition-colors"
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
+            {/* Overflow menu for destructive/secondary playlist actions */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen((o) => !o);
+                  setConfirmDelete(false);
+                }}
+                aria-label="Playlist options"
+                title="Playlist options"
+                className="w-9 h-9 rounded-full bg-[#18181B] border border-[#27272A] hover:bg-[#222226] flex items-center justify-center text-[#A1A1AA] hover:text-white transition-colors"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
 
-            <button
-              type="button"
-              onClick={() => onDeletePlaylist(playlist.id)}
-              aria-label="Delete playlist"
-              title="Delete playlist"
-              className="w-9 h-9 rounded-full bg-[#18181B] border border-[#27272A] hover:bg-[#222226] flex items-center justify-center text-[#A1A1AA] hover:text-[#F43F5E] transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+              {menuOpen && (
+                <div className="absolute left-0 mt-1.5 w-48 rounded-xl bg-[#18181B] border border-[#27272A] p-1.5 shadow-2xl z-30">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftName(playlist.name);
+                      setEditingName(true);
+                      setMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-[#FAFAFA] hover:bg-[#222226] text-left"
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-[#A1A1AA]" />
+                    <span>Rename playlist</span>
+                  </button>
+                  {!confirmDelete ? (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(true)}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-[#F43F5E] hover:bg-[#222226] text-left"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete playlist</span>
+                    </button>
+                  ) : (
+                    <div className="p-2 mt-1 rounded-lg bg-[#121212] border border-[#27272A] flex flex-col gap-1.5">
+                      <span className="text-[11px] text-[#FAFAFA] font-medium">
+                        Delete &ldquo;{playlist.name}&rdquo;?
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            onDeletePlaylist(playlist.id);
+                          }}
+                          className="flex-1 py-1 rounded bg-[#F43F5E] text-white text-[11px] font-semibold"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(false)}
+                          className="flex-1 py-1 rounded bg-[#222226] text-[#A1A1AA] text-[11px]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -237,37 +308,60 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
           </div>
 
           <div className="flex items-center gap-1 bg-[#121212] border border-[#27272A] p-1 rounded-lg">
-          <button
-            type="button"
-            onClick={() => setLayoutMode('list')}
-            aria-label="List view"
-            className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
-              layoutMode === 'list' ? 'bg-[#27272A] text-white' : 'text-[#71717A] hover:text-white'
-            }`}
-          >
-            <List className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setLayoutMode('grid')}
-            aria-label="Grid view"
-            className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
-              layoutMode === 'grid' ? 'bg-[#27272A] text-white' : 'text-[#71717A] hover:text-white'
-            }`}
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </button>
+            <button
+              type="button"
+              onClick={() => setLayoutMode('list')}
+              aria-label="List view"
+              className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+                layoutMode === 'list' ? 'bg-[#27272A] text-white' : 'text-[#71717A] hover:text-white'
+              }`}
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setLayoutMode('grid')}
+              aria-label="Grid view"
+              className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+                layoutMode === 'grid' ? 'bg-[#27272A] text-white' : 'text-[#71717A] hover:text-white'
+              }`}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
 
-      {layoutMode === 'grid' ? (
+      {filtered.length === 0 ? (
+        <div className="rounded-2xl bg-[#18181B] border border-[#27272A] p-10 text-center flex flex-col items-center gap-3">
+          <p className="text-sm font-medium text-[#FAFAFA]">
+            No matching tracks in this playlist
+          </p>
+          {filterText && (
+            <button
+              type="button"
+              onClick={() => setFilterText('')}
+              className="px-4 py-1.5 rounded-full bg-white text-black text-xs font-semibold hover:bg-[#E4E4E7] whitespace-nowrap"
+            >
+              Clear filter
+            </button>
+          )}
+        </div>
+      ) : layoutMode === 'grid' ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {filtered.map((track) => (
             <div
               key={track.video_id}
+              role="button"
+              tabIndex={0}
               onClick={() => onPlayTrack(track)}
-              className="bg-[#18181B] border border-[#27272A] rounded-xl p-3 hover:bg-[#222226] cursor-pointer"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onPlayTrack(track);
+                }
+              }}
+              className="bg-[#18181B] border border-[#27272A] rounded-xl p-3 hover:bg-[#222226] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 cursor-pointer"
             >
               <img
                 src={track.thumbnail_url}
@@ -298,8 +392,16 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
               return (
                 <div
                   key={track.video_id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onPlayTrack(track)}
-                  className={`h-[52px] rounded-lg transition-colors px-3 flex items-center group cursor-pointer ${
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onPlayTrack(track);
+                    }
+                  }}
+                  className={`h-[52px] rounded-lg transition-colors px-3 flex items-center group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 ${
                     isActive ? 'bg-[#1E1E22]' : 'hover:bg-[#222226]'
                   }`}
                 >
@@ -355,10 +457,11 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
                         e.stopPropagation();
                         onToggleLike(track.video_id);
                       }}
+                      aria-label={`Like ${track.title}`}
                       className={`transition-transform hover:scale-110 ${
                         track.liked
                           ? 'text-[#F43F5E]'
-                          : 'text-[#71717A] hover:text-white opacity-0 group-hover:opacity-100'
+                          : 'text-[#71717A] hover:text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100'
                       }`}
                     >
                       <Heart

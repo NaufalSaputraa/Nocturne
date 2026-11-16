@@ -36,13 +36,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [creating, setCreating] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
   const [newPlaylistSource, setNewPlaylistSource] = useState<'local' | 'ytm'>('local');
 
   const ytmPlaylists = playlists.filter((p) => p.source === 'ytm');
   const localPlaylists = playlists.filter((p) => p.source === 'local');
 
   const navClass = (selected: boolean) =>
-    `w-full rounded-lg flex items-center justify-between px-3 py-2 text-sm transition-colors text-left ${
+    `w-full rounded-lg flex items-center justify-between px-3 py-2 text-sm transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 ${
       selected
         ? 'bg-[#27272A] text-white font-medium'
         : 'text-[#A1A1AA] hover:text-white hover:bg-[#1E1E22]'
@@ -51,7 +52,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = newPlaylistName.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setNameError('Enter a playlist name');
+      return;
+    }
+    setNameError(null);
     onCreatePlaylist(trimmed, ytmConnected ? newPlaylistSource : 'local');
     setNewPlaylistName('');
     setCreating(false);
@@ -166,11 +171,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <input
                 type="text"
                 value={newPlaylistName}
-                onChange={(e) => setNewPlaylistName(e.target.value)}
+                onChange={(e) => {
+                  setNewPlaylistName(e.target.value);
+                  if (nameError) setNameError(null);
+                }}
                 placeholder="Playlist name..."
                 autoFocus
                 className="w-full bg-[#121212] border border-[#27272A] rounded px-2 py-1 text-xs text-[#FAFAFA] placeholder-[#71717A] outline-none focus:border-[#52525B]"
               />
+              {nameError && (
+                <p className="text-[11px] text-[#F43F5E]">{nameError}</p>
+              )}
               {ytmConnected && (
                 <div className="flex items-center gap-1.5 text-[11px]">
                   <button

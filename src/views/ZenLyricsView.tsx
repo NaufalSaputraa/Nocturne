@@ -7,6 +7,7 @@ import {
   Pause,
   Play,
   Repeat,
+  Repeat1,
   Shuffle,
   SkipBack,
   SkipForward,
@@ -18,6 +19,7 @@ import {
   type DemoLyricLine,
   type DemoTrack,
 } from '../data/mockLibrary';
+import { runWindowAction } from '../lib/windowControls';
 import { InteractiveLyricLine } from '../components/lyrics/InteractiveLyricLine';
 
 export interface ZenLyricsViewProps {
@@ -29,7 +31,7 @@ export interface ZenLyricsViewProps {
   repeatMode: 'off' | 'all' | 'one';
   upNext: DemoTrack[];
   lyrics: DemoLyricLine[];
-  lyricSource: 'LRCLIB' | 'YTM Lyrics';
+  lyricSource: 'LRCLIB' | 'YouTube Music';
   lyricOffsetMs: number;
   onBack: () => void;
   onTogglePlay: () => void;
@@ -128,12 +130,12 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
 
         <div className="flex items-center gap-3">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#18181B] border border-[#27272A] text-xs">
-            <span className="text-[#71717A] whitespace-nowrap">Offset</span>
+            <span className="text-[#71717A] whitespace-nowrap">Timing</span>
             <button
               type="button"
               onClick={() => onAdjustOffsetMs(-100)}
-              className="px-1.5 py-0.5 rounded bg-[#222226] hover:bg-[#27272A] text-[#FAFAFA] font-mono tabular-nums"
-              title="Shift lyrics -100ms"
+              className="px-1.5 py-0.5 rounded bg-[#222226] hover:bg-[#27272A] text-[#FAFAFA] font-mono tabular-nums whitespace-nowrap"
+              title="Show lyrics 100ms earlier"
             >
               -100ms
             </button>
@@ -143,8 +145,8 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
             <button
               type="button"
               onClick={() => onAdjustOffsetMs(100)}
-              className="px-1.5 py-0.5 rounded bg-[#222226] hover:bg-[#27272A] text-[#FAFAFA] font-mono tabular-nums"
-              title="Shift lyrics +100ms"
+              className="px-1.5 py-0.5 rounded bg-[#222226] hover:bg-[#27272A] text-[#FAFAFA] font-mono tabular-nums whitespace-nowrap"
+              title="Show lyrics 100ms later"
             >
               +100ms
             </button>
@@ -153,22 +155,27 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
           <div className="flex items-center border-l border-[#27272A] pl-2">
             <button
               type="button"
+              onClick={() => void runWindowAction('minimize')}
               aria-label="Minimize"
+              title="Minimize"
               className="w-9 h-8 flex items-center justify-center text-[#A1A1AA] hover:bg-[#27272A] hover:text-white rounded"
             >
               <Minus className="w-3.5 h-3.5" />
             </button>
             <button
               type="button"
+              onClick={() => void runWindowAction('toggleMaximize')}
               aria-label="Maximize"
+              title="Maximize"
               className="w-9 h-8 flex items-center justify-center text-[#A1A1AA] hover:bg-[#27272A] hover:text-white rounded"
             >
               <Square className="w-3 h-3" />
             </button>
             <button
               type="button"
+              onClick={() => void runWindowAction('close')}
               aria-label="Close"
-              onClick={onBack}
+              title="Close"
               className="w-9 h-8 flex items-center justify-center text-[#A1A1AA] hover:bg-[#E81123] hover:text-white rounded"
             >
               <X className="w-3.5 h-3.5" />
@@ -181,7 +188,6 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
       <main className="flex-1 flex flex-row w-full min-h-0 overflow-hidden">
         {/* Left Column (45%): Vinyl Deck & Radial Seek Ring */}
         <section className="w-[45%] max-w-[580px] h-full p-8 flex flex-col justify-between items-center border-r border-[#27272A]/70 bg-[#121212] relative overflow-hidden">
-          {/* Subtle Zen-only ambient artwork glow */}
           <div
             data-testid="zen-ambient-glow"
             style={{
@@ -196,7 +202,17 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
             <div className="relative w-[320px] h-[320px] flex items-center justify-center">
               <svg
                 onClick={handleRingClick}
-                className="w-[320px] h-[320px] -rotate-90 cursor-pointer"
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    onSeekMs(Math.min(durationMs, currentTimeMs + 5_000));
+                  } else if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    onSeekMs(Math.max(0, currentTimeMs - 5_000));
+                  }
+                }}
+                tabIndex={0}
+                className="w-[320px] h-[320px] -rotate-90 cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60"
                 viewBox="0 0 320 320"
                 role="slider"
                 aria-label="Radial seek ring"
@@ -225,13 +241,11 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
                 />
               </svg>
 
-              {/* Radial Seek Thumb */}
               <div
                 style={{ left: `${knobX - 7}px`, top: `${knobY - 7}px` }}
                 className="absolute w-3.5 h-3.5 rounded-full bg-white border border-[#18181B] pointer-events-none"
               />
 
-              {/* Circular 280px Vinyl Disc */}
               <div className="absolute w-[280px] h-[280px] rounded-full overflow-hidden bg-[#09090B] border border-[#27272A] flex items-center justify-center pointer-events-none">
                 <div className="absolute inset-0 vinyl-grooves rounded-full z-10" />
                 <div
@@ -254,7 +268,6 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
               </div>
             </div>
 
-            {/* Clean Timestamps (no redundant linear seek bar below radial ring) */}
             <div className="w-[260px] flex items-center justify-between mt-3 px-2 font-mono text-xs tabular-nums">
               <span className="text-[#FAFAFA] font-medium">
                 {formatTimeSec(currentTimeMs / 1000)}
@@ -264,7 +277,6 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
               </span>
             </div>
 
-            {/* Precision Transport Controls */}
             <div className="flex items-center justify-center gap-7 mt-5">
               <button
                 type="button"
@@ -307,14 +319,18 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
               <button
                 type="button"
                 onClick={onCycleRepeat}
-                aria-label="Repeat"
+                aria-label={`Repeat: ${repeatMode}`}
                 className={`p-1.5 relative transition-colors ${
                   repeatMode !== 'off'
                     ? 'text-[#F43F5E]'
                     : 'text-[#71717A] hover:text-white'
                 }`}
               >
-                <Repeat className="w-5 h-5" />
+                {repeatMode === 'one' ? (
+                  <Repeat1 className="w-5 h-5" />
+                ) : (
+                  <Repeat className="w-5 h-5" />
+                )}
                 {repeatMode !== 'off' && (
                   <span className="absolute bottom-0.5 right-1 w-1 h-1 rounded-full bg-[#F43F5E]" />
                 )}
@@ -334,7 +350,6 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
             </div>
           </div>
 
-          {/* 3 Up Next Mini Cards */}
           <div className="w-full mt-auto pt-5 border-t border-[#27272A]/60 z-10">
             <div className="flex items-center justify-between mb-3 px-1">
               <span className="text-[11px] uppercase tracking-wider text-[#71717A] font-semibold whitespace-nowrap">
@@ -403,33 +418,42 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
           </div>
 
           <div className="my-auto py-6 px-5 lyrics-mask flex flex-col space-y-5 z-10 max-h-[580px] overflow-y-auto">
-            {lyrics.map((line, idx) => {
-              const isActive = idx === activeIdx;
-              const isPast = effectiveTimeMs >= line.end_time_ms;
-              return (
-                <div
-                  key={line.start_time_ms}
-                  ref={isActive ? activeLineRef : undefined}
-                >
-                  <InteractiveLyricLine
-                    text={line.text}
-                    startTimeMs={line.start_time_ms}
-                    endTimeMs={line.end_time_ms}
-                    currentTimeMs={effectiveTimeMs}
-                    isActive={isActive}
-                    isPast={isPast}
-                    fontSizeClass={largeText ? 'text-[32px]' : 'text-[28px]'}
-                    onClickLine={(t) => onSeekMs(Math.max(0, t - lyricOffsetMs))}
-                  />
-                </div>
-              );
-            })}
+            {lyrics.length === 0 ? (
+              <div className="py-16 text-center">
+                <p className="text-base font-medium text-[#A1A1AA]">
+                  Instrumental or no synced lyrics available
+                </p>
+                <p className="text-xs text-[#71717A] mt-1">
+                  Enjoy the music in distraction-free mode.
+                </p>
+              </div>
+            ) : (
+              lyrics.map((line, idx) => {
+                const isActive = idx === activeIdx;
+                const isPast = effectiveTimeMs >= line.end_time_ms;
+                return (
+                  <div
+                    key={line.start_time_ms}
+                    ref={isActive ? activeLineRef : undefined}
+                  >
+                    <InteractiveLyricLine
+                      text={line.text}
+                      startTimeMs={line.start_time_ms}
+                      endTimeMs={line.end_time_ms}
+                      currentTimeMs={effectiveTimeMs}
+                      isActive={isActive}
+                      isPast={isPast}
+                      fontSizeClass={largeText ? 'text-[32px]' : 'text-[28px]'}
+                      onClickLine={(t) => onSeekMs(Math.max(0, t - lyricOffsetMs))}
+                    />
+                  </div>
+                );
+              })
+            )}
           </div>
 
           <div className="flex items-center justify-between text-xs text-[#71717A] pt-4 border-t border-[#27272A]/60 z-10">
-            <div className="flex items-center gap-3">
-              <span>Lyrics source: {lyricSource} (YTM Fallback Ready)</span>
-            </div>
+            <span>Synced via {lyricSource} • Click any line to jump</span>
 
             <div className="flex items-center gap-4 text-[#A1A1AA]">
               <button

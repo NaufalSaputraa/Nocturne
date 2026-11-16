@@ -8,6 +8,7 @@ import {
   Square,
   X,
 } from 'lucide-react';
+import { runWindowAction } from '../../lib/windowControls';
 
 export interface TitlebarProps {
   searchQuery: string;
@@ -20,18 +21,6 @@ export interface TitlebarProps {
   onOpenSettings: () => void;
   ytmConnected: boolean;
   onToggleYtmProfile: () => void;
-}
-
-async function runWindowAction(action: 'minimize' | 'toggleMaximize' | 'close') {
-  try {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    const win = getCurrentWindow();
-    if (action === 'minimize') await win.minimize();
-    if (action === 'toggleMaximize') await win.toggleMaximize();
-    if (action === 'close') await win.close();
-  } catch {
-    // Running inside Vite preview or Vitest without Tauri runtime
-  }
 }
 
 export const Titlebar: React.FC<TitlebarProps> = ({
