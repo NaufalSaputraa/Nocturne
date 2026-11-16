@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  ArrowUpDown,
   BadgeCheck,
   Clock,
   Download,
@@ -13,10 +14,22 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
+  InteractiveDropdown,
+  type DropdownOption,
+} from '../components/ui/InteractiveDropdown';
+import {
   formatTimeSec,
   type DemoPlaylist,
   type DemoTrack,
 } from '../data/mockLibrary';
+
+type SortKey = 'custom' | 'title' | 'duration';
+
+const SORT_OPTIONS: DropdownOption<SortKey>[] = [
+  { value: 'custom', label: 'Sort: Custom Order' },
+  { value: 'title', label: 'Sort: Title (A–Z)' },
+  { value: 'duration', label: 'Sort: Duration' },
+];
 
 export interface PlaylistDetailViewProps {
   playlist: DemoPlaylist;
@@ -44,17 +57,24 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
   onDeletePlaylist,
 }) => {
   const [filterText, setFilterText] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('custom');
   const [layoutMode, setLayoutMode] = useState<'list' | 'grid'>('list');
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(playlist.name);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
 
-  const filtered = tracks.filter(
-    (t) =>
-      t.title.toLowerCase().includes(filterText.trim().toLowerCase()) ||
-      t.artist.toLowerCase().includes(filterText.trim().toLowerCase()) ||
-      t.album.toLowerCase().includes(filterText.trim().toLowerCase()),
-  );
+  const filtered = tracks
+    .filter(
+      (t) =>
+        t.title.toLowerCase().includes(filterText.trim().toLowerCase()) ||
+        t.artist.toLowerCase().includes(filterText.trim().toLowerCase()) ||
+        t.album.toLowerCase().includes(filterText.trim().toLowerCase()),
+    )
+    .sort((a, b) => {
+      if (sortKey === 'title') return a.title.localeCompare(b.title);
+      if (sortKey === 'duration') return a.duration_sec - b.duration_sec;
+      return 0;
+    });
 
   const totalSec = tracks.reduce((sum, t) => sum + t.duration_sec, 0);
   const totalMins = Math.round(totalSec / 60);
@@ -203,7 +223,20 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-1 bg-[#121212] border border-[#27272A] p-1 rounded-lg">
+        <div className="flex items-center gap-3">
+          <div className="w-[185px]">
+            <InteractiveDropdown
+              ariaLabel="Sort playlist tracks"
+              size="sm"
+              align="right"
+              value={sortKey}
+              options={SORT_OPTIONS}
+              prefixIcon={<ArrowUpDown className="w-3.5 h-3.5" />}
+              onChange={setSortKey}
+            />
+          </div>
+
+          <div className="flex items-center gap-1 bg-[#121212] border border-[#27272A] p-1 rounded-lg">
           <button
             type="button"
             onClick={() => setLayoutMode('list')}
@@ -224,6 +257,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
           >
             <LayoutGrid className="w-4 h-4" />
           </button>
+          </div>
         </div>
       </div>
 

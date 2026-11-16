@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  AudioLines,
   CheckCircle2,
   Folder,
   Palette,
@@ -8,6 +9,31 @@ import {
   Terminal,
   X,
 } from 'lucide-react';
+import {
+  InteractiveDropdown,
+  type DropdownOption,
+} from '../ui/InteractiveDropdown';
+
+const QUALITY_OPTIONS: DropdownOption[] = [
+  {
+    value: 'Opus 160kbps',
+    label: 'High • Opus 160 kbps',
+    badge: '48kHz VBR',
+    description: 'Recommended balance of transparency and instant stream start.',
+  },
+  {
+    value: 'M4A 256kbps',
+    label: 'AAC High • M4A 256 kbps',
+    badge: 'AAC-LC',
+    description: 'Maximum compatibility for offline downloads and external players.',
+  },
+  {
+    value: 'Opus 128kbps',
+    label: 'Data Saver • Opus 128 kbps',
+    badge: 'Low BW',
+    description: 'Faster buffering on metered or slow connections.',
+  },
+];
 
 export type SettingsTab = 'audio' | 'storage' | 'engine' | 'account';
 
@@ -136,22 +162,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex-1 overflow-y-auto py-4 pr-1 space-y-4">
             {tab === 'audio' && (
               <>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-[#A1A1AA] font-medium">
-                    Audio Stream Quality
-                  </label>
-                  <select
-                    value={draft.audioQuality}
-                    onChange={(e) =>
-                      setDraft({ ...draft, audioQuality: e.target.value })
-                    }
-                    className="w-full bg-[#121212] border border-[#27272A] rounded-lg px-3 py-2 text-xs text-[#FAFAFA] outline-none focus:border-[#52525B]"
-                  >
-                    <option value="Opus 160kbps">High (Opus • 160 kbps, 48kHz VBR)</option>
-                    <option value="M4A 256kbps">AAC High (M4A • 256 kbps)</option>
-                    <option value="Opus 128kbps">Data Saver (Opus • 128 kbps)</option>
-                  </select>
-                </div>
+                <InteractiveDropdown
+                  label="Audio Stream Quality"
+                  value={draft.audioQuality}
+                  options={QUALITY_OPTIONS}
+                  prefixIcon={<AudioLines className="w-4 h-4" />}
+                  onChange={(audioQuality) =>
+                    setDraft({ ...draft, audioQuality })
+                  }
+                />
 
                 <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#121212] border border-[#27272A]">
                   <div className="pr-4">

@@ -21,16 +21,22 @@ describe('Nocturne Stitch UI Integration', () => {
     expect(screen.getByText('Top Result')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Videos' })).not.toBeInTheDocument();
 
-    // 3. Playlist Detail view
+    // 3. Playlist Detail view & interactive sort dropdown
     fireEvent.click(screen.getByRole('button', { name: /Late Night Coding/i }));
     expect(screen.getByText('DATE ADDED')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Find in playlist...')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Sort playlist tracks' }));
+    fireEvent.click(screen.getByRole('option', { name: /Sort: Title/i }));
+    expect(screen.getByRole('button', { name: 'Sort playlist tracks' })).toHaveTextContent('Sort: Title');
 
-    // 4. Settings Modal (all tabs + Nocturne Client stamp)
+    // 4. Settings Modal (interactive quality dropdown + tabs + Nocturne Client stamp)
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     expect(screen.getByRole('dialog', { name: 'Nocturne Settings' })).toBeInTheDocument();
     expect(screen.getByText('Nocturne Client')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save Changes' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Audio Stream Quality/i }));
+    fireEvent.click(screen.getByRole('option', { name: /M4A 256 kbps/i }));
+    expect(screen.getByRole('button', { name: /Audio Stream Quality/i })).toHaveTextContent('M4A 256 kbps');
     fireEvent.click(screen.getByRole('button', { name: /Engine & Discord/i }));
     expect(screen.getByText('Discord Rich Presence')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
