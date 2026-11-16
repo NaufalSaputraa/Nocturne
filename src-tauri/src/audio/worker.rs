@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -5,6 +6,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::audio::engine::{compute_preamp_volume_scale, AudioBackend};
 use crate::db::session::SessionPersistence;
 use crate::extractor::stream::DualTierExtractor;
+use crate::metadata::search::{deduplicate_radio_tracks, CatalogProvider};
 use crate::models::{PlaybackSession, PlaybackSyncPayload, TrackMetadata};
 
 /// Commands sent from Tauri IPC / SMTC / Tray to the dedicated audio worker actor.
@@ -22,6 +24,7 @@ pub enum AudioCommand {
     SetAutoplay(bool),
     SetNormalization(bool),
     SetCrossfadeMs(u64),
+    AppendRadioTracks(Vec<TrackMetadata>),
     GetSnapshot(oneshot::Sender<WorkerSnapshot>),
     Shutdown,
 }
@@ -65,6 +68,9 @@ struct WorkerState {
     prefetched_for_index: Option<usize>,
     last_buffering: bool,
     session_persistence: Option<SessionPersistence>,
+    catalog: Option<Arc<dyn CatalogProvider>>,
+    auto_radio_in_flight: bool,
+    played_ids: HashSet<String>,
 }
 
 impl WorkerState {
@@ -127,6 +133,7 @@ impl WorkerState {
 
     async fn play_track(&mut self, track: TrackMetadata) {
         self.current_track = Some(track.clone());
+        self.played_ids.insert(track.video_id.clone());
         self.prefetched_for_index = None;
         self.sink.emit_track_changed(Some(track.clone()));
 
@@ -175,6 +182,41 @@ impl WorkerState {
                 let _ = extractor.resolve_stream(&next_track.video_id, &quality).await;
             });
         }
+    }
+
+    async fn maybe_trigger_auto_radio(&mut self, worker_tx: &mpsc::Sender<AudioCommand>) {
+        if !self.autoplay_enabled || self.auto_radio_in_flight {
+            return;
+        }
+        let remaining_ahead = self.queue.len().saturating_sub(self.current_index + 1);
+        if remaining_ahead > 1 {
+            return;
+        }
+        let Some(catalog) = self.catalog.as_ref().map(Arc::clone) else {
+            return;
+        };
+        let Some(seed) = self
+            .current_track
+            .as_ref()
+            .or_else(|| self.queue.last())
+            .map(|t| t.video_id.clone())
+        else {
+            return;
+        };
+
+        let mut exclude = self.played_ids.clone();
+        for t in &self.queue {
+            exclude.insert(t.video_id.clone());
+        }
+        self.auto_radio_in_flight = true;
+        let tx = worker_tx.clone();
+        tokio::spawn(async move {
+            let tracks = catalog
+                .get_auto_radio(&seed, &exclude)
+                .await
+                .unwrap_or_default();
+            let _ = tx.send(AudioCommand::AppendRadioTracks(tracks)).await;
+        });
     }
 
     async fn advance_next(&mut self, from_eof: bool) {
@@ -246,7 +288,29 @@ pub fn spawn_audio_worker_with_session(
     initial_volume: f32,
     session_persistence: Option<SessionPersistence>,
 ) -> mpsc::Sender<AudioCommand> {
+    spawn_audio_worker_with_deps(
+        backend,
+        extractor,
+        sink,
+        quality,
+        initial_volume,
+        session_persistence,
+        None,
+    )
+}
+
+/// Spawns the dedicated 500ms audio worker actor with SQLite persistence and Auto-Radio catalog.
+pub fn spawn_audio_worker_with_deps(
+    backend: Box<dyn AudioBackend>,
+    extractor: Arc<DualTierExtractor>,
+    sink: Arc<dyn PlaybackEventSink>,
+    quality: String,
+    initial_volume: f32,
+    session_persistence: Option<SessionPersistence>,
+    catalog: Option<Arc<dyn CatalogProvider>>,
+) -> mpsc::Sender<AudioCommand> {
     let (tx, mut rx) = mpsc::channel::<AudioCommand>(64);
+    let worker_tx = tx.clone();
 
     tokio::spawn(async move {
         let mut state = WorkerState {
@@ -267,6 +331,9 @@ pub fn spawn_audio_worker_with_session(
             prefetched_for_index: None,
             last_buffering: false,
             session_persistence,
+            catalog,
+            auto_radio_in_flight: false,
+            played_ids: HashSet::new(),
         };
 
         let mut ticker = tokio::time::interval(Duration::from_millis(500));
@@ -327,6 +394,7 @@ pub fn spawn_audio_worker_with_session(
                         }
                         AudioCommand::Next => {
                             state.advance_next(false).await;
+                            state.maybe_trigger_auto_radio(&worker_tx).await;
                         }
                         AudioCommand::Prev => {
                             state.step_prev().await;
@@ -339,6 +407,9 @@ pub fn spawn_audio_worker_with_session(
                         }
                         AudioCommand::SetAutoplay(enabled) => {
                             state.autoplay_enabled = enabled;
+                            if enabled {
+                                state.maybe_trigger_auto_radio(&worker_tx).await;
+                            }
                         }
                         AudioCommand::SetNormalization(enabled) => {
                             state.normalize_enabled = enabled;
@@ -346,6 +417,19 @@ pub fn spawn_audio_worker_with_session(
                         }
                         AudioCommand::SetCrossfadeMs(ms) => {
                             state.crossfade_ms = ms;
+                        }
+                        AudioCommand::AppendRadioTracks(tracks) => {
+                            state.auto_radio_in_flight = false;
+                            let mut existing: HashSet<String> =
+                                state.queue.iter().map(|t| t.video_id.clone()).collect();
+                            for id in &state.played_ids {
+                                existing.insert(id.clone());
+                            }
+                            let unique = deduplicate_radio_tracks(tracks, &existing);
+                            if !unique.is_empty() {
+                                state.queue.extend(unique);
+                                state.sink.emit_queue_updated(state.queue.clone(), state.current_index);
+                            }
                         }
                         AudioCommand::GetSnapshot(reply) => {
                             let st = state.backend.poll_state();

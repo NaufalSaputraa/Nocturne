@@ -1,6 +1,7 @@
 pub mod audio;
 pub mod db;
 pub mod extractor;
+pub mod metadata;
 pub mod models;
 
 #[tauri::command]
