@@ -1,0 +1,37 @@
+[package]
+name = "nocturne"
+version = "0.1.0"
+description = "Lightweight ad-free desktop YouTube Music player"
+authors = ["Nocturne Contributors"]
+edition = "2021"
+
+[lib]
+name = "nocturne_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+serde_json = "1"
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
+rustypipe = "0.11"
+souvlaki = "0.8"
+libloading = "0.8"
+async-trait = "0.1"
+discord-rich-presence = "0.2"
+keyring = { version = "3", features = ["windows-native"] }
+chrono = "0.4"
+thiserror = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_LibraryLoader"] }
+
+[dev-dependencies]
+tempfile = "3"
