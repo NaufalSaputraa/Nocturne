@@ -43,9 +43,15 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   return (
     <aside className="w-[300px] shrink-0 bg-[#18181B] border-l border-[#27272A] p-4 flex flex-col gap-4 overflow-hidden select-none">
       {/* Segmented Tab Switch */}
-      <div className="flex items-center p-1 bg-[#121212] rounded-lg border border-[#27272A] shrink-0">
+      <div
+        role="tablist"
+        aria-label="Queue and lyrics panel"
+        className="flex items-center p-1 bg-[#121212] rounded-lg border border-[#27272A] shrink-0"
+      >
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'queue'}
           onClick={() => setActiveTab('queue')}
           className={`flex-1 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
             activeTab === 'queue'
@@ -57,6 +63,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'lyrics'}
           onClick={() => setActiveTab('lyrics')}
           className={`flex-1 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
             activeTab === 'lyrics'
@@ -68,19 +76,19 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         </button>
       </div>
 
-      {/* Compact Now Playing Header Card (gives Queue/Lyrics much more vertical space) */}
+      {/* Compact Now Playing Header Card */}
       <div className="flex items-center gap-3 p-2.5 rounded-xl bg-[#121212] border border-[#27272A] shrink-0">
         <img
           src={currentTrack.thumbnail_url}
           alt={currentTrack.title}
-          className="w-14 h-14 rounded-lg aspect-square object-cover shrink-0"
+          className="w-12 h-12 rounded-lg aspect-square object-cover shrink-0"
         />
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-[#FAFAFA] truncate">
             {currentTrack.title}
           </h3>
           <p className="text-xs text-[#A1A1AA] truncate">{currentTrack.artist}</p>
-          <p className="text-[11px] text-[#71717A] truncate mt-0.5">
+          <p className="text-[11px] text-[#8E8E98] truncate mt-0.5">
             {currentTrack.album}
           </p>
         </div>
@@ -88,8 +96,10 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           type="button"
           onClick={() => onToggleLike(currentTrack.video_id)}
           aria-label={currentTrack.liked ? 'Unlike track' : 'Like track'}
-          className={`p-1.5 rounded-full transition-transform hover:scale-110 shrink-0 ${
-            currentTrack.liked ? 'text-[#F43F5E]' : 'text-[#71717A] hover:text-white'
+          className={`p-1.5 rounded-lg transition-colors shrink-0 ${
+            currentTrack.liked
+              ? 'text-[#F43F5E] hover:bg-[#222226]'
+              : 'text-[#8E8E98] hover:text-white hover:bg-[#222226]'
           }`}
         >
           <Heart className={`w-4 h-4 ${currentTrack.liked ? 'fill-[#F43F5E]' : ''}`} />
@@ -99,8 +109,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({
       {activeTab === 'queue' ? (
         <div className="flex flex-col gap-2 flex-1 min-h-0">
           <div className="flex items-center justify-between gap-2 shrink-0">
-            <span className="text-[11px] uppercase font-semibold text-[#71717A] tracking-wider whitespace-nowrap">
-              Next in Queue
+            <span className="text-xs font-medium text-[#8E8E98] whitespace-nowrap">
+              Next in queue
             </span>
             <div className="flex items-center gap-2">
               <button
@@ -108,7 +118,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                 onClick={onToggleAutoplay}
                 aria-pressed={autoplayEnabled}
                 title="Automatically queue related tracks"
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap ${
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-medium border transition-colors whitespace-nowrap ${
                   autoplayEnabled
                     ? 'bg-[#F43F5E]/15 text-[#F43F5E] border-[#F43F5E]/40'
                     : 'bg-[#222226] text-[#A1A1AA] border-[#27272A] hover:text-white'
@@ -121,7 +131,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                 <button
                   type="button"
                   onClick={onClearQueue}
-                  className="text-xs text-[#71717A] hover:text-white transition-colors whitespace-nowrap"
+                  className="text-xs text-[#8E8E98] hover:text-white transition-colors whitespace-nowrap"
                 >
                   Clear
                 </button>
@@ -145,7 +155,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
 
           <div className="flex flex-col gap-1 overflow-y-auto pr-0.5 flex-1 min-h-0">
             {queue.length === 0 ? (
-              <div className="py-8 text-center text-xs text-[#71717A] px-3">
+              <div className="py-8 text-center text-xs text-[#8E8E98] px-3">
                 {autoplayEnabled
                   ? 'Autoplay is on — related tracks will queue automatically.'
                   : 'Your queue is empty. Pick a song to start listening.'}
@@ -169,7 +179,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                     </p>
                     <p className="text-[11px] text-[#A1A1AA] truncate">{track.artist}</p>
                   </div>
-                  <span className="text-xs font-mono text-[#71717A] tabular-nums shrink-0">
+                  <span className="text-xs font-mono text-[#8E8E98] tabular-nums shrink-0">
                     {formatTimeSec(track.duration_sec)}
                   </span>
                 </button>
@@ -180,8 +190,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({
       ) : (
         <div className="flex flex-col gap-3 flex-1 min-h-0">
           <div className="flex items-center justify-between shrink-0">
-            <span className="text-[11px] uppercase font-semibold text-[#71717A] tracking-wider whitespace-nowrap">
-              Synced Lyrics
+            <span className="text-xs font-medium text-[#8E8E98] whitespace-nowrap">
+              Synced lyrics
             </span>
             <button
               type="button"

@@ -66,7 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside className="w-[220px] shrink-0 bg-[#18181B] border-r border-[#27272A] p-4 flex flex-col gap-6 overflow-y-auto select-none">
       {/* Menu Section */}
       <div>
-        <div className="text-[11px] uppercase font-semibold text-[#71717A] tracking-wider mb-2 px-3 whitespace-nowrap">
+        <div className="text-xs font-medium text-[#8E8E98] mb-2 px-3 whitespace-nowrap">
           Menu
         </div>
         <nav className="flex flex-col gap-1">
@@ -105,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Library Section */}
       <div>
-        <div className="text-[11px] uppercase font-semibold text-[#71717A] tracking-wider mb-2 px-3 whitespace-nowrap">
+        <div className="text-xs font-medium text-[#8E8E98] mb-2 px-3 whitespace-nowrap">
           Library
         </div>
         <nav className="flex flex-col gap-1">
@@ -138,7 +138,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Download className="w-4 h-4 shrink-0" />
               <span>Offline</span>
             </span>
-            <span className="text-[11px] font-mono tabular-nums text-[#71717A] bg-[#222226] px-1.5 py-0.5 rounded">
+            <span className="text-[11px] font-mono tabular-nums text-[#8E8E98] bg-[#222226] px-1.5 py-0.5 rounded">
               {offlineCount}
             </span>
           </button>
@@ -149,7 +149,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex-1 flex flex-col gap-4">
         <div>
           <div className="flex items-center justify-between px-3 mb-2">
-            <span className="text-[11px] uppercase font-semibold text-[#71717A] tracking-wider whitespace-nowrap">
+            <span className="text-xs font-medium text-[#8E8E98] whitespace-nowrap">
               Playlists
             </span>
             <button
@@ -157,7 +157,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => setCreating((prev) => !prev)}
               aria-label="Create Playlist"
               title="Create Playlist"
-              className="text-[#71717A] hover:text-white transition-colors p-0.5 rounded hover:bg-[#222226]"
+              className="text-[#8E8E98] hover:text-white transition-colors p-0.5 rounded hover:bg-[#222226]"
             >
               <Plus className="w-4 h-4" />
             </button>
@@ -175,9 +175,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   setNewPlaylistName(e.target.value);
                   if (nameError) setNameError(null);
                 }}
-                placeholder="Playlist name..."
+                placeholder="Playlist name"
                 autoFocus
-                className="w-full bg-[#121212] border border-[#27272A] rounded px-2 py-1 text-xs text-[#FAFAFA] placeholder-[#71717A] outline-none focus:border-[#52525B]"
+                className="w-full bg-[#121212] border border-[#27272A] rounded px-2 py-1 text-xs text-[#FAFAFA] placeholder-[#8E8E98] outline-none focus:border-[#52525B]"
               />
               {nameError && (
                 <p className="text-[11px] text-[#F43F5E]">{nameError}</p>
@@ -219,7 +219,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {ytmConnected && ytmPlaylists.length > 0 && (
             <div className="mb-3">
-              <div className="px-3 mb-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-emerald-400/90">
+              <div className="px-3 mb-1 flex items-center gap-1.5 text-[11px] font-medium text-emerald-400/90">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                 <span className="whitespace-nowrap">YouTube Music</span>
               </div>
@@ -234,7 +234,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     )}
                   >
                     <span className="flex items-center gap-2.5 min-w-0">
-                      <ListMusic className="w-4 h-4 shrink-0 text-[#71717A]" />
+                      <ListMusic className="w-4 h-4 shrink-0 text-[#8E8E98]" />
                       <span className="truncate">{playlist.name}</span>
                     </span>
                   </button>
@@ -244,7 +244,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
 
           <div>
-            <div className="px-3 mb-1 text-[10px] font-medium uppercase tracking-wider text-[#71717A] whitespace-nowrap">
+            <div className="px-3 mb-1 text-[11px] font-medium text-[#8E8E98] whitespace-nowrap">
               Local Library
             </div>
             <nav className="flex flex-col gap-0.5">

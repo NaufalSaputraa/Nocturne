@@ -117,8 +117,8 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           onFocus={() => {
             if (searchQuery.trim().length > 0) onSearchSubmit();
           }}
-          placeholder="Search songs, artists, albums, or paste YouTube link..."
-          className="bg-transparent border-none outline-none text-xs text-[#FAFAFA] placeholder-[#71717A] flex-1 min-w-0 p-0 focus:ring-0"
+          placeholder="Search songs, artists, or paste link"
+          className="bg-transparent border-none outline-none text-xs text-[#FAFAFA] placeholder-[#8E8E98] flex-1 min-w-0 p-0 focus:ring-0"
         />
         {searchQuery.length > 0 && (
           <button
@@ -131,8 +131,8 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             <X className="w-2.5 h-2.5" />
           </button>
         )}
-        <kbd className="text-[10px] font-medium uppercase tracking-wider text-[#A1A1AA] bg-[#161618] border border-[#2E2E33] px-2 py-0.5 rounded whitespace-nowrap shrink-0">
-          CTRL K
+        <kbd className="text-[10px] font-medium text-[#A1A1AA] bg-[#161618] border border-[#2E2E33] px-2 py-0.5 rounded whitespace-nowrap shrink-0">
+          Ctrl K
         </kbd>
       </form>
 
@@ -143,9 +143,9 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           onClick={onOpenSettings}
           aria-label="Settings"
           title="Settings"
-          className="w-8 h-8 rounded-full flex items-center justify-center text-[#A1A1AA] hover:text-white hover:bg-[#222226] transition-colors"
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-[#A1A1AA] hover:text-white hover:bg-[#222226] transition-colors"
         >
-          <Settings className="w-[18px] h-[18px]" />
+          <Settings className="w-4 h-4" />
         </button>
 
         <button
@@ -158,7 +158,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           }
           className="relative cursor-pointer group focus:outline-none"
         >
-          <div className="w-8 h-8 rounded-full bg-[#27272A] p-[1.5px] group-hover:bg-[#3F3F46] transition-colors">
+          <div className="w-8 h-8 rounded-full bg-[#27272A] p-0.5 group-hover:bg-[#3F3F46] transition-colors">
             <div className="w-full h-full rounded-full bg-[#18181B] flex items-center justify-center">
               <span className="text-xs font-semibold text-[#FAFAFA] whitespace-nowrap">
                 {ytmConnected ? 'NS' : 'LC'}
@@ -167,7 +167,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           </div>
           <span
             className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-[#121212] ${
-              ytmConnected ? 'bg-emerald-400' : 'bg-[#71717A]'
+              ytmConnected ? 'bg-emerald-400' : 'bg-[#8E8E98]'
             }`}
           />
         </button>

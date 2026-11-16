@@ -101,7 +101,7 @@ export function InteractiveDropdown<T extends string = string>({
         aria-controls={open ? listboxId : undefined}
         aria-label={ariaLabel ?? label}
         onClick={handleToggle}
-        className={`w-full flex items-center justify-between gap-2.5 rounded-xl border transition-all outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 ${
+        className={`w-full flex items-center justify-between gap-2.5 rounded-xl border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 ${
           size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-3.5 py-2.5 text-xs'
         } ${
           open
@@ -113,7 +113,7 @@ export function InteractiveDropdown<T extends string = string>({
           {prefixIcon && <span className="shrink-0 text-[#F43F5E]">{prefixIcon}</span>}
           <span className="font-medium truncate">{selectedOption?.label}</span>
           {selectedOption?.badge && (
-            <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#27272A] text-[#A1A1AA] whitespace-nowrap shrink-0">
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#27272A] text-[#A1A1AA] whitespace-nowrap shrink-0">
               {selectedOption.badge}
             </span>
           )}
@@ -159,13 +159,13 @@ export function InteractiveDropdown<T extends string = string>({
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium truncate">{opt.label}</span>
                     {opt.badge && (
-                      <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#121212] border border-[#27272A] text-[#A1A1AA] whitespace-nowrap">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#121212] border border-[#27272A] text-[#A1A1AA] whitespace-nowrap">
                         {opt.badge}
                       </span>
                     )}
                   </div>
                   {opt.description && (
-                    <p className="text-[11px] text-[#71717A] mt-0.5 leading-snug">
+                    <p className="text-[11px] text-[#8E8E98] mt-0.5 leading-snug">
                       {opt.description}
                     </p>
                   )}

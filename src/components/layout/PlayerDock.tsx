@@ -88,8 +88,10 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
           type="button"
           onClick={() => onToggleLike(currentTrack.video_id)}
           title={currentTrack.liked ? 'Liked' : 'Like song'}
-          className={`ml-1 p-1.5 rounded-full transition-transform hover:scale-110 shrink-0 ${
-            currentTrack.liked ? 'text-[#F43F5E]' : 'text-[#71717A] hover:text-white'
+          className={`ml-1 p-1.5 rounded-lg transition-colors shrink-0 ${
+            currentTrack.liked
+              ? 'text-[#F43F5E] hover:bg-[#222226]'
+              : 'text-[#8E8E98] hover:text-white hover:bg-[#222226]'
           }`}
         >
           <Heart className={`w-4 h-4 ${currentTrack.liked ? 'fill-[#F43F5E]' : ''}`} />
@@ -105,10 +107,10 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
             aria-label="Shuffle"
             title="Shuffle"
             className={`transition-colors ${
-              shuffle ? 'text-[#F43F5E]' : 'text-[#71717A] hover:text-[#FAFAFA]'
+              shuffle ? 'text-[#F43F5E]' : 'text-[#8E8E98] hover:text-[#FAFAFA]'
             }`}
           >
-            <Shuffle className="w-[17px] h-[17px]" />
+            <Shuffle className="w-4 h-4" />
           </button>
 
           <button
@@ -126,7 +128,7 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
             onClick={onTogglePlay}
             aria-label={isPlaying ? 'Pause' : 'Play'}
             title={isPlaying ? 'Pause' : 'Play'}
-            className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+            className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:bg-[#E4E4E7] transition-colors"
           >
             {isPlaying ? (
               <Pause className="w-5 h-5 fill-current" />
@@ -153,13 +155,13 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
             className={`relative transition-colors ${
               repeatMode !== 'off'
                 ? 'text-[#F43F5E]'
-                : 'text-[#71717A] hover:text-[#FAFAFA]'
+                : 'text-[#8E8E98] hover:text-[#FAFAFA]'
             }`}
           >
             {repeatMode === 'one' ? (
-              <Repeat1 className="w-[17px] h-[17px]" />
+              <Repeat1 className="w-4 h-4" />
             ) : (
-              <Repeat className="w-[17px] h-[17px]" />
+              <Repeat className="w-4 h-4" />
             )}
             {repeatMode !== 'off' && (
               <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#F43F5E] rounded-full" />
@@ -173,6 +175,13 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
           </span>
           <div
             onClick={handleBarSeek}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+              handleBarSeek(e);
+            }}
+            onPointerMove={(e) => {
+              if (e.buttons === 1) handleBarSeek(e);
+            }}
             onKeyDown={(e) => {
               if (e.key === 'ArrowRight') {
                 e.preventDefault();
@@ -195,7 +204,7 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <span className="text-xs font-mono text-[#71717A] w-10 tabular-nums">
+          <span className="text-xs font-mono text-[#8E8E98] w-10 tabular-nums">
             {formatTimeSec(durationMs / 1000)}
           </span>
         </div>
@@ -207,7 +216,7 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
           type="button"
           onClick={onOpenZenMode}
           title="Enter Zen Focus Lyrics Mode"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#222226] border border-[#27272A] text-xs font-medium text-[#FAFAFA] hover:border-[#3F3F46] hover:bg-[#28282D] transition-colors whitespace-nowrap"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#222226] border border-[#27272A] text-xs font-medium text-[#FAFAFA] hover:border-[#3F3F46] hover:bg-[#28282D] transition-colors whitespace-nowrap"
         >
           <Mic2 className="w-3.5 h-3.5 text-[#F43F5E]" />
           <span>Lyrics</span>
@@ -224,7 +233,7 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
               : 'text-[#A1A1AA] hover:text-white'
           }`}
         >
-          <ListMusic className="w-[18px] h-[18px]" />
+          <ListMusic className="w-4 h-4" />
         </button>
 
         <div className="flex items-center gap-2">
@@ -235,9 +244,9 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
             className="hover:text-white transition-colors"
           >
             {muted || volume === 0 ? (
-              <VolumeX className="w-[18px] h-[18px]" />
+              <VolumeX className="w-4 h-4" />
             ) : (
-              <Volume2 className="w-[18px] h-[18px]" />
+              <Volume2 className="w-4 h-4" />
             )}
           </button>
           <input

@@ -115,10 +115,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label="Nocturne Settings"
-      className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4"
     >
-      <div className="w-[700px] max-w-full h-[540px] max-h-[85vh] bg-[#18181B] border border-[#27272A] rounded-2xl flex overflow-hidden select-none">
-        <aside className="w-[196px] shrink-0 bg-[#121212] border-r border-[#27272A] p-4 flex flex-col justify-between">
+      <div className="w-[704px] max-w-full h-[544px] max-h-[85vh] bg-[#18181B] border border-[#27272A] rounded-2xl flex overflow-hidden select-none">
+        <aside className="w-48 shrink-0 bg-[#121212] border-r border-[#27272A] p-4 flex flex-col justify-between">
           <div className="flex flex-col gap-5">
             <div className="flex items-center gap-2 px-1">
               <SlidersHorizontal className="w-4 h-4 text-[#F43F5E]" />
@@ -283,7 +286,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     aria-label="Cache Size Limit"
                     className="w-full accent-[#F43F5E] cursor-pointer"
                   />
-                  <div className="flex items-center justify-between text-[11px] text-[#71717A] font-mono tabular-nums">
+                  <div className="flex items-center justify-between text-[11px] text-[#8E8E98] font-mono tabular-nums">
                     <span>
                       {cacheUsedGb.toFixed(1)} GB used of {draft.lruLimitGb.toFixed(1)} GB limit
                     </span>
@@ -291,7 +294,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                   <div className="w-full h-1.5 bg-[#27272A] rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-[#FAFAFA] rounded-full transition-all"
+                      className="h-full bg-[#FAFAFA] rounded-full transition-[width]"
                       style={{ width: `${usagePct}%` }}
                     />
                   </div>
@@ -398,8 +401,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                   </button>
                   {showDiagnostics && (
-                    <div className="px-3.5 pb-3 pt-1 text-[11px] font-mono text-[#71717A] space-y-1 border-t border-[#27272A]">
-                      <p>Primary extractor: rustypipe (&lt; 250 ms Innertube)</p>
+                    <div className="px-3.5 pb-3 pt-1 text-[11px] font-mono text-[#8E8E98] space-y-1 border-t border-[#27272A]">
+                      <p>Primary extractor: rustypipe (&lt; 250 ms)</p>
                       <p>Fallback sidecar: yt-dlp (5.5h stream URL cache)</p>
                       <p>Loudness: static pre-amp via perceptualLoudnessDb</p>
                       <p>Storage: SQLite WAL + 5s debounced session restore</p>

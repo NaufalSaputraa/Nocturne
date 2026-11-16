@@ -58,7 +58,7 @@ export const InteractiveLyricLine: React.FC<InteractiveLyricLineProps> = ({
   currentTimeMs,
   isActive,
   isPast,
-  fontSizeClass = 'text-[28px]',
+  fontSizeClass = 'text-2xl',
   onClickLine,
 }) => {
   const { words } = useMemo(
@@ -68,17 +68,25 @@ export const InteractiveLyricLine: React.FC<InteractiveLyricLineProps> = ({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={() => onClickLine?.(startTimeMs)}
-      className={`cursor-pointer select-none transition-all duration-300 ease-out rounded-xl ${
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClickLine?.(startTimeMs);
+        }
+      }}
+      className={`cursor-pointer select-none transition-[opacity,transform,border-color] duration-300 ease-out rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 ${
         isActive
-          ? 'opacity-100 scale-[1.01] origin-left border-l-[3.5px] border-[#F43F5E] pl-5 -ml-5 py-2'
+          ? 'opacity-100 scale-[1.01] origin-left border-l-2 border-[#F43F5E] pl-5 -ml-5 py-2'
           : isPast
-            ? 'opacity-40 hover:opacity-75 py-1.5'
-            : 'opacity-35 hover:opacity-70 py-1.5'
+            ? 'opacity-45 hover:opacity-80 py-1.5'
+            : 'opacity-40 hover:opacity-75 py-1.5'
       }`}
     >
       <p
-        className={`${fontSizeClass} leading-[1.4] font-bold tracking-tight flex flex-wrap gap-x-[0.28em]`}
+        className={`${fontSizeClass} leading-[1.4] font-semibold flex flex-wrap gap-x-1.5`}
       >
         {words.map((wordChars, wIdx) => (
           <span key={wIdx} className="inline-flex">
@@ -104,14 +112,10 @@ export const InteractiveLyricLine: React.FC<InteractiveLyricLineProps> = ({
                     transform: `translate3d(0, ${translateY.toFixed(2)}px, 0) scale(${scale.toFixed(3)})`,
                     color:
                       progress > 0.15
-                        ? `rgba(255, 255, 255, ${0.45 + progress * 0.55})`
+                        ? `rgba(255, 255, 255, ${0.5 + progress * 0.5})`
                         : isPast
-                          ? 'rgba(113, 113, 122, 0.85)'
-                          : 'rgba(161, 161, 170, 0.55)',
-                    textShadow:
-                      isActive && popCurve > 0.1
-                        ? `0 0 ${(popCurve * 18).toFixed(1)}px rgba(255, 255, 255, ${(popCurve * 0.55).toFixed(2)})`
-                        : 'none',
+                          ? 'rgba(142, 142, 152, 0.85)'
+                          : 'rgba(161, 161, 170, 0.6)',
                   }}
                   className="inline-block will-change-transform transition-[color] duration-75"
                 >

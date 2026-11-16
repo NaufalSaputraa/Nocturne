@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   BookmarkPlus,
   Check,
@@ -52,6 +52,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
 }) => {
   const [filter, setFilter] = useState<HomeFilter>(initialFilter);
 
+  useEffect(() => {
+    setFilter(initialFilter);
+  }, [initialFilter]);
+
   const visibleTracks =
     filter === 'Offline' ? tracks.filter((t) => t.offline) : tracks;
 
@@ -67,7 +71,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   return (
     <div className="flex flex-col w-full gap-6">
       {sectionTitle && (
-        <h1 className="text-2xl font-bold tracking-tight text-[#FAFAFA]">
+        <h1 className="text-2xl font-semibold text-[#FAFAFA]">
           {sectionTitle}
         </h1>
       )}
@@ -104,14 +108,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
             />
           </div>
           <div className="flex-1 flex flex-col justify-center min-w-0">
-            <span className="text-xs uppercase font-bold text-[#F43F5E] tracking-wider mb-1 whitespace-nowrap">
-              Curated Playlist
+            <span className="text-xs font-medium text-[#F43F5E] mb-1 whitespace-nowrap">
+              Curated playlist
             </span>
-            <h1 className="text-2xl font-bold text-[#FAFAFA] tracking-tight mb-2">
+            <h1 className="text-2xl font-semibold text-[#FAFAFA] mb-2">
               Chill Coding &amp; Lo-Fi Beats
             </h1>
             <p className="text-sm text-[#A1A1AA] mb-5">
-              Curated for deep focus • {tracks.length} songs • Ad-free direct stream
+              Curated for deep focus • {tracks.length} songs • Direct high-bitrate stream
             </p>
             <div className="flex items-center gap-3 flex-wrap">
               <button
@@ -160,7 +164,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <img
                   src={album.cover_url}
                   alt={album.title}
-                  className="w-full h-full aspect-square object-cover group-hover:scale-105 transition-transform duration-300"
+                  className="w-full h-full aspect-square object-cover"
                 />
               </div>
               <h3 className="text-sm font-semibold text-[#FAFAFA] truncate">
@@ -190,7 +194,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 className="w-16 h-16 rounded-lg aspect-square object-cover shrink-0"
               />
               <div className="min-w-0">
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-[#F43F5E]">
+                <span className="text-[11px] font-medium text-[#F43F5E]">
                   {pl.source === 'ytm' ? 'YouTube Music' : 'Local Library'}
                 </span>
                 <h3 className="text-sm font-semibold text-[#FAFAFA] truncate">
@@ -213,7 +217,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <p className="text-sm font-medium text-[#FAFAFA]">
                 No tracks here yet
               </p>
-              <p className="text-xs text-[#71717A] max-w-sm">
+              <p className="text-xs text-[#8E8E98] max-w-sm">
                 {filter === 'Offline'
                   ? 'Download tracks from any playlist or library list to play them offline.'
                   : 'Play or like songs to populate this list.'}
@@ -222,7 +226,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setFilter('All')}
-                  className="px-4 py-1.5 rounded-full bg-white text-black text-xs font-semibold hover:bg-[#E4E4E7] whitespace-nowrap"
+                  className="px-4 py-1.5 rounded-lg bg-white text-black text-xs font-semibold hover:bg-[#E4E4E7] whitespace-nowrap"
                 >
                   Show All Tracks
                 </button>
@@ -230,7 +234,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-12 gap-4 px-4 py-2 text-xs font-semibold text-[#71717A] uppercase tracking-wider border-b border-[#27272A] select-none">
+              <div className="grid grid-cols-12 gap-4 px-4 py-2 text-xs font-medium text-[#8E8E98] border-b border-[#27272A] select-none">
                 <div className="col-span-1 flex items-center">#</div>
                 <div className="col-span-5 flex items-center whitespace-nowrap">Title</div>
                 <div className="col-span-3 flex items-center whitespace-nowrap">Album</div>
@@ -267,16 +271,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       <div className="col-span-1 flex items-center">
                         {isActive ? (
                           <div
-                            className="flex items-end gap-[3px] h-3.5 w-3.5"
+                            className="flex items-end gap-0.5 h-3.5 w-3.5"
                             aria-label="Playing"
                           >
-                            <span className="w-[3px] bg-[#F43F5E] h-full animate-pulse rounded-full" />
-                            <span className="w-[3px] bg-[#F43F5E] h-2/3 animate-pulse rounded-full" />
-                            <span className="w-[3px] bg-[#F43F5E] h-4/5 animate-pulse rounded-full" />
+                            <span className="w-1 bg-[#F43F5E] h-full rounded-full" />
+                            <span className="w-1 bg-[#F43F5E] h-2 rounded-full" />
+                            <span className="w-1 bg-[#F43F5E] h-3 rounded-full" />
                           </div>
                         ) : (
                           <>
-                            <span className="text-xs font-medium text-[#71717A] tabular-nums group-hover:hidden">
+                            <span className="text-xs font-medium text-[#8E8E98] tabular-nums group-hover:hidden">
                               {idx + 1}
                             </span>
                             <Play className="w-4 h-4 text-white fill-current hidden group-hover:block" />
@@ -326,7 +330,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           className={`p-1 rounded transition-colors ${
                             track.offline
                               ? 'text-emerald-400'
-                              : 'text-[#52525B] hover:text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100'
+                              : 'text-[#8E8E98] hover:text-white opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100'
                           }`}
                         >
                           <Download className="w-4 h-4" />
@@ -341,10 +345,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
                             onToggleLike(track.video_id);
                           }}
                           aria-label={`Like ${track.title}`}
-                          className={`transition-transform hover:scale-110 ${
+                          className={`p-1 rounded transition-colors ${
                             track.liked
                               ? 'text-[#F43F5E]'
-                              : 'text-[#52525B] hover:text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100'
+                              : 'text-[#8E8E98] hover:text-white opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100'
                           }`}
                         >
                           <Heart

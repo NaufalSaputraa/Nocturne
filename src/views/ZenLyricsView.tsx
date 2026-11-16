@@ -114,23 +114,23 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#18181B] border border-[#27272A] text-sm text-[#FAFAFA] hover:bg-[#222226] transition-colors whitespace-nowrap"
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-[#18181B] border border-[#27272A] text-sm text-[#FAFAFA] hover:bg-[#222226] transition-colors whitespace-nowrap"
           >
             <ArrowLeft className="w-4 h-4 text-[#A1A1AA]" />
-            <span className="font-medium tracking-tight">Back to Library</span>
+            <span className="font-medium">Back to Library</span>
           </button>
         </div>
 
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#18181B] border border-[#27272A]">
-          <span className="w-2 h-2 rounded-full bg-[#F43F5E] animate-pulse" />
-          <span className="text-xs font-medium text-[#A1A1AA] tracking-wide whitespace-nowrap">
-            YouTube Audio • Ad-Free
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-[#18181B] border border-[#27272A]">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#F43F5E]" />
+          <span className="text-xs font-medium text-[#A1A1AA] whitespace-nowrap">
+            Direct stream
           </span>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#18181B] border border-[#27272A] text-xs">
-            <span className="text-[#71717A] whitespace-nowrap">Timing</span>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#18181B] border border-[#27272A] text-xs">
+            <span className="text-[#8E8E98] whitespace-nowrap">Timing</span>
             <button
               type="button"
               onClick={() => onAdjustOffsetMs(-100)}
@@ -188,20 +188,17 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
       <main className="flex-1 flex flex-row w-full min-h-0 overflow-hidden">
         {/* Left Column (45%): Vinyl Deck & Radial Seek Ring */}
         <section className="w-[45%] max-w-[580px] h-full p-8 flex flex-col justify-between items-center border-r border-[#27272A]/70 bg-[#121212] relative overflow-hidden">
-          <div
-            data-testid="zen-ambient-glow"
-            style={{
-              backgroundColor: currentTrack.accentColor,
-              opacity: 0.12,
-              filter: 'blur(96px)',
-            }}
-            className="absolute w-[440px] h-[440px] -top-4 pointer-events-none rounded-full"
-          />
-
           <div className="relative flex flex-col items-center justify-center mt-2 z-10">
             <div className="relative w-[320px] h-[320px] flex items-center justify-center">
               <svg
                 onClick={handleRingClick}
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture?.(e.pointerId);
+                  handleRingClick(e);
+                }}
+                onPointerMove={(e) => {
+                  if (e.buttons === 1) handleRingClick(e);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'ArrowRight') {
                     e.preventDefault();
@@ -259,9 +256,9 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
                     className="w-full h-full aspect-square object-cover rounded-full"
                   />
                 </div>
-                <div className="absolute z-20 w-[64px] h-[64px] rounded-full bg-[#18181B] border-2 border-[#27272A] flex flex-col items-center justify-center gap-1">
-                  <span className="text-[7px] font-mono tracking-widest text-[#A1A1AA] uppercase font-bold">
-                    NOCTURNE
+                <div className="absolute z-20 w-16 h-16 rounded-full bg-[#18181B] border-2 border-[#27272A] flex flex-col items-center justify-center gap-1">
+                  <span className="text-[8px] font-mono text-[#A1A1AA] font-semibold">
+                    Nocturne
                   </span>
                   <div className="w-2.5 h-2.5 rounded-full bg-[#121212] border border-[#3F3F46]" />
                 </div>
@@ -272,7 +269,7 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
               <span className="text-[#FAFAFA] font-medium">
                 {formatTimeSec(currentTimeMs / 1000)}
               </span>
-              <span className="text-[#71717A]">
+              <span className="text-[#8E8E98]">
                 {formatTimeSec(durationMs / 1000)}
               </span>
             </div>
@@ -283,7 +280,7 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
                 onClick={onToggleShuffle}
                 aria-label="Shuffle"
                 className={`p-1.5 transition-colors ${
-                  shuffle ? 'text-[#F43F5E]' : 'text-[#71717A] hover:text-white'
+                  shuffle ? 'text-[#F43F5E]' : 'text-[#8E8E98] hover:text-white'
                 }`}
               >
                 <Shuffle className="w-5 h-5" />
@@ -300,7 +297,7 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
                 type="button"
                 onClick={onTogglePlay}
                 aria-label={isPlaying ? 'Pause' : 'Play'}
-                className="w-[52px] h-[52px] rounded-full bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+                className="w-12 h-12 rounded-full bg-white text-black flex items-center justify-center hover:bg-[#E4E4E7] transition-colors"
               >
                 {isPlaying ? (
                   <Pause className="w-5 h-5 fill-current" />
@@ -323,7 +320,7 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
                 className={`p-1.5 relative transition-colors ${
                   repeatMode !== 'off'
                     ? 'text-[#F43F5E]'
-                    : 'text-[#71717A] hover:text-white'
+                    : 'text-[#8E8E98] hover:text-white'
                 }`}
               >
                 {repeatMode === 'one' ? (
@@ -339,8 +336,10 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
                 type="button"
                 onClick={() => onToggleLike(currentTrack.video_id)}
                 aria-label="Like"
-                className={`p-1.5 transition-transform hover:scale-110 ${
-                  currentTrack.liked ? 'text-[#F43F5E]' : 'text-[#71717A] hover:text-white'
+                className={`p-1.5 rounded-lg transition-colors ${
+                  currentTrack.liked
+                    ? 'text-[#F43F5E] hover:bg-[#222226]'
+                    : 'text-[#8E8E98] hover:text-white hover:bg-[#222226]'
                 }`}
               >
                 <Heart
@@ -352,8 +351,8 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
 
           <div className="w-full mt-auto pt-5 border-t border-[#27272A]/60 z-10">
             <div className="flex items-center justify-between mb-3 px-1">
-              <span className="text-[11px] uppercase tracking-wider text-[#71717A] font-semibold whitespace-nowrap">
-                UP NEXT
+              <span className="text-xs text-[#8E8E98] font-medium whitespace-nowrap">
+                Up next
               </span>
               <button
                 type="button"
@@ -397,23 +396,23 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
         <section className="w-[55%] h-full p-10 flex flex-col justify-between bg-[#121212] relative overflow-hidden">
           <div className="flex items-start justify-between z-10">
             <div>
-              <h1 className="text-3xl font-bold text-[#FAFAFA] tracking-tight">
+              <h1 className="text-3xl font-semibold text-[#FAFAFA]">
                 {currentTrack.title}
               </h1>
-              <p className="text-[15px] font-medium text-[#A1A1AA] mt-1 flex items-center gap-2">
+              <p className="text-sm font-medium text-[#A1A1AA] mt-1 flex items-center gap-2">
                 <span>{currentTrack.artist}</span>
                 <span className="text-[#3F3F46]">•</span>
-                <span className="text-[#71717A]">{currentTrack.album}</span>
+                <span className="text-[#8E8E98]">{currentTrack.album}</span>
                 <span className="text-[#3F3F46]">•</span>
-                <span className="text-xs text-[#71717A] font-mono tabular-nums">
+                <span className="text-xs text-[#8E8E98] font-mono tabular-nums">
                   {currentTrack.year}
                 </span>
               </p>
             </div>
 
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#18181B] border border-[#27272A] text-emerald-400 text-xs font-medium tracking-wide whitespace-nowrap">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>SYNCED LYRICS</span>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#18181B] border border-[#27272A] text-emerald-400 text-xs font-medium whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>Synced lyrics</span>
             </div>
           </div>
 
@@ -423,7 +422,7 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
                 <p className="text-base font-medium text-[#A1A1AA]">
                   Instrumental or no synced lyrics available
                 </p>
-                <p className="text-xs text-[#71717A] mt-1">
+                <p className="text-xs text-[#8E8E98] mt-1">
                   Enjoy the music in distraction-free mode.
                 </p>
               </div>

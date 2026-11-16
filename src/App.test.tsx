@@ -15,7 +15,7 @@ describe('Nocturne Stitch UI Integration', () => {
 
     // 2. Search view (without Videos chip) + explicit zero-result empty state
     const searchInput = screen.getByPlaceholderText(
-      /Search songs, artists, albums/i,
+      /Search songs, artists, or paste link/i,
     );
     fireEvent.change(searchInput, { target: { value: 'Perunggu' } });
     expect(screen.getByText('Top Result')).toBeInTheDocument();
@@ -27,8 +27,8 @@ describe('Nocturne Stitch UI Integration', () => {
 
     // 3. Playlist Detail view, interactive sort dropdown, and 2-step delete confirmation
     fireEvent.click(screen.getByRole('button', { name: /Late Night Coding/i }));
-    expect(screen.getByText('DATE ADDED')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Find in playlist...')).toBeInTheDocument();
+    expect(screen.getByText('Date added')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Filter tracks')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Sort playlist tracks' }));
     fireEvent.click(screen.getByRole('option', { name: /Sort: Title/i }));
     expect(screen.getByRole('button', { name: 'Sort playlist tracks' })).toHaveTextContent(
@@ -60,11 +60,10 @@ describe('Nocturne Stitch UI Integration', () => {
     expect(screen.getByText(/rustypipe/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    // 6. Lyrics Focus View (NOCTURNE spindle, ambient glow, interactive lyrics)
+    // 6. Lyrics Focus View (Nocturne spindle, interactive lyrics)
     fireEvent.click(screen.getByTitle('Enter Zen Focus Lyrics Mode'));
-    expect(screen.getByText('NOCTURNE')).toBeInTheDocument();
-    expect(screen.getByTestId('zen-ambient-glow')).toHaveStyle({ opacity: '0.12' });
-    expect(screen.getByText('SYNCED LYRICS')).toBeInTheDocument();
+    expect(screen.getByText('Nocturne')).toBeInTheDocument();
+    expect(screen.getByText('Synced lyrics')).toBeInTheDocument();
     expect(screen.getByText('Back to Library')).toBeInTheDocument();
   }, 15_000);
 

@@ -4,7 +4,7 @@ import { DEMO_TRACKS, DEMO_ZEN_LYRICS } from '../data/mockLibrary';
 import { ZenLyricsView } from './ZenLyricsView';
 
 describe('ZenLyricsView', () => {
-  it('renders radial seek ring, zen ambient glow, 3 Up Next cards, and lyric offset controls', () => {
+  it('renders radial seek ring, 3 Up next cards, and lyric offset controls', () => {
     const onAdjustOffsetMs = vi.fn();
     render(
       <ZenLyricsView
@@ -31,13 +31,8 @@ describe('ZenLyricsView', () => {
       />,
     );
 
-    const glow = screen.getByTestId('zen-ambient-glow');
-    expect(glow).toBeInTheDocument();
-    expect(glow.style.opacity).toBe('0.12');
-    expect(glow.style.filter).toContain('blur(96px)');
-
     expect(screen.getByRole('slider', { name: 'Radial seek ring' })).toBeInTheDocument();
-    expect(screen.getByText('UP NEXT')).toBeInTheDocument();
+    expect(screen.getByText('Up next')).toBeInTheDocument();
     expect(screen.getByText(DEMO_TRACKS[1].title)).toBeInTheDocument();
     expect(screen.getByText(DEMO_TRACKS[2].title)).toBeInTheDocument();
     expect(screen.getByText(DEMO_TRACKS[3].title)).toBeInTheDocument();

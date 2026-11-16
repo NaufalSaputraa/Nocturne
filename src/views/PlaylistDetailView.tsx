@@ -71,7 +71,31 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
     setEditingName(false);
     setMenuOpen(false);
     setConfirmDelete(false);
+    setDownloadProgress(null);
   }, [playlist.id, playlist.name]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        setConfirmDelete(false);
+      }
+    };
+    const onPointerDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest('[data-playlist-menu]')) {
+        setMenuOpen(false);
+        setConfirmDelete(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, [menuOpen]);
 
   const filtered = tracks
     .filter(
@@ -104,8 +128,8 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
   return (
     <div className="flex flex-col w-full">
       {/* Playlist Hero Section */}
-      <section className="flex flex-row items-center gap-6 mb-7 group">
-        <div className="relative w-[176px] h-[176px] rounded-xl overflow-hidden shrink-0 bg-[#18181B] border border-[#27272A]">
+      <section className="flex flex-col sm:flex-row sm:items-center gap-6 mb-7 group">
+        <div className="relative w-44 h-44 rounded-xl overflow-hidden shrink-0 bg-[#18181B] border border-[#27272A]">
           <img
             src={playlist.cover_url}
             alt={playlist.name}
@@ -114,7 +138,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
         </div>
 
         <div className="flex flex-col justify-center min-w-0 flex-1">
-          <span className="text-[11px] uppercase font-semibold tracking-wider text-[#A1A1AA] mb-1.5 whitespace-nowrap">
+          <span className="text-xs font-medium text-[#A1A1AA] mb-1.5 whitespace-nowrap">
             {playlist.source === 'ytm' ? 'YouTube Music Playlist' : 'Local Playlist'}
           </span>
 
@@ -211,7 +235,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
             </button>
 
             {/* Overflow menu for destructive/secondary playlist actions */}
-            <div className="relative">
+            <div className="relative" data-playlist-menu>
               <button
                 type="button"
                 onClick={() => {
@@ -283,19 +307,19 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
 
       {/* Filter & Layout Toolbar */}
       <div className="flex items-center justify-between py-2.5 mb-3 bg-[#18181B] border border-[#27272A] rounded-xl px-3">
-        <div className="w-[240px] bg-[#222226] rounded-lg px-3 py-1.5 flex items-center gap-2">
-          <Search className="w-4 h-4 text-[#71717A] shrink-0" />
+        <div className="w-60 bg-[#222226] rounded-lg px-3 py-1.5 flex items-center gap-2">
+          <Search className="w-4 h-4 text-[#8E8E98] shrink-0" />
           <input
             type="text"
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
-            placeholder="Find in playlist..."
-            className="bg-transparent border-none outline-none text-xs text-[#FAFAFA] placeholder-[#71717A] w-full p-0 focus:ring-0"
+            placeholder="Filter tracks"
+            className="bg-transparent border-none outline-none text-xs text-[#FAFAFA] placeholder-[#8E8E98] w-full p-0 focus:ring-0"
           />
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="w-[185px]">
+          <div className="w-48">
             <InteractiveDropdown
               ariaLabel="Sort playlist tracks"
               size="sm"
@@ -375,11 +399,11 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
         </div>
       ) : (
         <div className="flex flex-col w-full">
-          <div className="flex items-center text-[11px] font-semibold uppercase tracking-wider text-[#71717A] px-3 pb-2 border-b border-[#27272A] select-none">
+          <div className="flex items-center text-xs font-medium text-[#8E8E98] px-3 pb-2 border-b border-[#27272A] select-none">
             <div className="w-10 text-center">#</div>
             <div className="flex-1 px-3 whitespace-nowrap">Title</div>
             <div className="w-52 px-3 whitespace-nowrap">Album</div>
-            <div className="w-36 px-3 whitespace-nowrap">DATE ADDED</div>
+            <div className="w-36 px-3 whitespace-nowrap">Date added</div>
             <div className="w-10 text-center" />
             <div className="w-16 text-right flex items-center justify-end pr-2">
               <Clock className="w-4 h-4" />
@@ -401,20 +425,20 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
                       onPlayTrack(track);
                     }
                   }}
-                  className={`h-[52px] rounded-lg transition-colors px-3 flex items-center group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 ${
+                  className={`h-13 rounded-lg transition-colors px-3 flex items-center group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 ${
                     isActive ? 'bg-[#1E1E22]' : 'hover:bg-[#222226]'
                   }`}
                 >
                   <div className="w-10 flex items-center justify-center shrink-0">
                     {isActive ? (
-                      <div className="flex items-end gap-0.5 h-3.5 w-3">
-                        <span className="w-0.5 bg-[#F43F5E] animate-pulse h-full rounded-full" />
-                        <span className="w-0.5 bg-[#F43F5E] animate-pulse h-2/3 rounded-full" />
-                        <span className="w-0.5 bg-[#F43F5E] animate-pulse h-4/5 rounded-full" />
+                      <div className="flex items-end gap-0.5 h-3.5 w-3.5" aria-label="Playing">
+                        <span className="w-1 bg-[#F43F5E] h-full rounded-full" />
+                        <span className="w-1 bg-[#F43F5E] h-2 rounded-full" />
+                        <span className="w-1 bg-[#F43F5E] h-3 rounded-full" />
                       </div>
                     ) : (
                       <>
-                        <span className="text-xs text-[#71717A] tabular-nums group-hover:hidden">
+                        <span className="text-xs text-[#8E8E98] tabular-nums group-hover:hidden">
                           {idx + 1}
                         </span>
                         <Play className="w-4 h-4 text-white fill-current hidden group-hover:block" />
@@ -446,7 +470,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
                     {track.album}
                   </div>
 
-                  <div className="w-36 px-3 whitespace-nowrap text-xs text-[#71717A]">
+                  <div className="w-36 px-3 whitespace-nowrap text-xs text-[#8E8E98]">
                     {track.date_added}
                   </div>
 
@@ -458,10 +482,10 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
                         onToggleLike(track.video_id);
                       }}
                       aria-label={`Like ${track.title}`}
-                      className={`transition-transform hover:scale-110 ${
+                      className={`p-1 rounded transition-colors ${
                         track.liked
                           ? 'text-[#F43F5E]'
-                          : 'text-[#71717A] hover:text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100'
+                          : 'text-[#8E8E98] hover:text-white opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100'
                       }`}
                     >
                       <Heart
