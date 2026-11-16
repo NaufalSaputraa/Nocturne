@@ -23,6 +23,7 @@ export interface HomeViewProps {
   albums: DemoAlbum[];
   playlists: DemoPlaylist[];
   activeTrackId: string;
+  isPlaying?: boolean;
   bannerSaved: boolean;
   initialFilter?: HomeFilter;
   onPlayTrack: (track: DemoTrack) => void;
@@ -41,6 +42,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   albums,
   playlists,
   activeTrackId,
+  isPlaying = true,
   bannerSaved,
   initialFilter = 'All',
   onPlayTrack,
@@ -272,11 +274,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         {isActive ? (
                           <div
                             className="flex items-end gap-0.5 h-3.5 w-3.5"
-                            aria-label="Playing"
+                            aria-label={isPlaying ? 'Playing' : 'Paused'}
                           >
-                            <span className="w-1 bg-[#F43F5E] h-full rounded-full" />
-                            <span className="w-1 bg-[#F43F5E] h-2 rounded-full" />
-                            <span className="w-1 bg-[#F43F5E] h-3 rounded-full" />
+                            <span className={`w-1 bg-[#F43F5E] rounded-full ${isPlaying ? 'h-full' : 'h-1.5 opacity-60'}`} />
+                            <span className={`w-1 bg-[#F43F5E] rounded-full ${isPlaying ? 'h-2' : 'h-1.5 opacity-60'}`} />
+                            <span className={`w-1 bg-[#F43F5E] rounded-full ${isPlaying ? 'h-3' : 'h-1.5 opacity-60'}`} />
                           </div>
                         ) : (
                           <>

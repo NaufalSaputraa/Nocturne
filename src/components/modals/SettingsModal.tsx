@@ -30,6 +30,7 @@ export interface NocturneSettings {
 
 export interface SettingsModalProps {
   open: boolean;
+  initialTab?: SettingsTab;
   settings: NocturneSettings;
   onClose: () => void;
   onSave: (next: NocturneSettings) => void;
@@ -58,11 +59,12 @@ const QUALITY_OPTIONS: DropdownOption[] = [
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   open,
+  initialTab = 'audio',
   settings,
   onClose,
   onSave,
 }) => {
-  const [tab, setTab] = useState<SettingsTab>('audio');
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [draft, setDraft] = useState<NocturneSettings>(settings);
   const [cacheUsedGb, setCacheUsedGb] = useState(1.4);
   const [cacheNotice, setCacheNotice] = useState<string | null>(null);
@@ -85,7 +87,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setDraft(settings);
     setCacheNotice(null);
     setConfirmDiscard(false);
-  }, [settings, open]);
+    if (open) setTab(initialTab);
+  }, [settings, open, initialTab]);
 
   useEffect(() => {
     if (!open) return;
@@ -212,7 +215,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               aria-label="Close Settings"
               className="w-8 h-8 rounded-full flex items-center justify-center text-[#8E8E98] hover:text-white hover:bg-[#222226] transition-colors"
             >

@@ -36,6 +36,7 @@ export interface PlaylistDetailViewProps {
   playlist: DemoPlaylist;
   tracks: DemoTrack[];
   activeTrackId: string;
+  isPlaying?: boolean;
   onPlayTrack: (track: DemoTrack) => void;
   onPlayAll: (tracks: DemoTrack[]) => void;
   onShufflePlay: (tracks: DemoTrack[]) => void;
@@ -49,6 +50,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
   playlist,
   tracks,
   activeTrackId,
+  isPlaying = true,
   onPlayTrack,
   onPlayAll,
   onShufflePlay,
@@ -431,10 +433,10 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
                 >
                   <div className="w-10 flex items-center justify-center shrink-0">
                     {isActive ? (
-                      <div className="flex items-end gap-0.5 h-3.5 w-3.5" aria-label="Playing">
-                        <span className="w-1 bg-[#F43F5E] h-full rounded-full" />
-                        <span className="w-1 bg-[#F43F5E] h-2 rounded-full" />
-                        <span className="w-1 bg-[#F43F5E] h-3 rounded-full" />
+                      <div className="flex items-end gap-0.5 h-3.5 w-3.5" aria-label={isPlaying ? 'Playing' : 'Paused'}>
+                        <span className={`w-1 bg-[#F43F5E] rounded-full ${isPlaying ? 'h-full' : 'h-1.5 opacity-60'}`} />
+                        <span className={`w-1 bg-[#F43F5E] rounded-full ${isPlaying ? 'h-2' : 'h-1.5 opacity-60'}`} />
+                        <span className={`w-1 bg-[#F43F5E] rounded-full ${isPlaying ? 'h-3' : 'h-1.5 opacity-60'}`} />
                       </div>
                     ) : (
                       <>

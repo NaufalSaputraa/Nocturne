@@ -21,6 +21,7 @@ import { ZenLyricsView } from './views/ZenLyricsView';
 import {
   SettingsModal,
   type NocturneSettings,
+  type SettingsTab,
 } from './components/modals/SettingsModal';
 import {
   DEMO_ALBUMS,
@@ -57,6 +58,8 @@ export function App() {
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [rightPanelTab, setRightPanelTab] = useState<'queue' | 'lyrics'>('queue');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('audio');
+  const [ipcError, setIpcError] = useState<string | null>(null);
   const [bannerSaved, setBannerSaved] = useState(false);
 
   const [activeTrackId, setActiveTrackId] = useState<string>(DEMO_TRACKS[0].video_id);
@@ -230,16 +233,30 @@ export function App() {
         return;
       }
       if (e.code === 'Space') {
+        if (target?.closest('button, [role="button"], [role="slider"], a')) return;
         e.preventDefault();
         setIsPlaying((p) => !p);
+        void tauriApi.togglePlayback().catch((err) => setIpcError(String(err)));
       } else if (e.key === 'ArrowRight') {
+        if (target?.closest('[role="slider"], input[type="range"]')) return;
         e.preventDefault();
-        setCurrentTimeMs((prev) => Math.min(durationMs, prev + 5_000));
+        const nextPos = Math.min(durationMs, currentTimeMs + 5_000);
+        setCurrentTimeMs(nextPos);
+        resetClockAnchorForSeek(nextPos);
+        void tauriApi.seekTo(nextPos).catch((err) => setIpcError(String(err)));
       } else if (e.key === 'ArrowLeft') {
+        if (target?.closest('[role="slider"], input[type="range"]')) return;
         e.preventDefault();
-        setCurrentTimeMs((prev) => Math.max(0, prev - 5_000));
+        const nextPos = Math.max(0, currentTimeMs - 5_000);
+        setCurrentTimeMs(nextPos);
+        resetClockAnchorForSeek(nextPos);
+        void tauriApi.seekTo(nextPos).catch((err) => setIpcError(String(err)));
       } else if (e.key.toLowerCase() === 'm') {
-        setMuted((m) => !m);
+        setMuted((m) => {
+          const next = !m;
+          void tauriApi.setVolume(next ? 0 : volume).catch((err) => setIpcError(String(err)));
+          return next;
+        });
       } else if (e.key.toLowerCase() === 'l') {
         if (route.kind === 'lyrics') {
           if (historyIdx > 0) setHistoryIdx(historyIdx - 1);
@@ -250,7 +267,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [durationMs, historyIdx, pushRoute, route.kind, settingsOpen]);
+  }, [currentTimeMs, durationMs, historyIdx, pushRoute, route.kind, settingsOpen, volume]);
 
   const recordTrackPlay = (videoId: string) => {
     setPlayHistoryIds((prev) => [videoId, ...prev.filter((id) => id !== videoId)]);
@@ -467,10 +484,32 @@ export function App() {
         canGoForward={historyIdx < history.length - 1}
         onBack={() => setHistoryIdx((i) => Math.max(0, i - 1))}
         onForward={() => setHistoryIdx((i) => Math.min(history.length - 1, i + 1))}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => {
+          setSettingsTab('audio');
+          setSettingsOpen(true);
+        }}
         ytmConnected={settings.ytmConnected}
-        onToggleYtmProfile={() => setSettingsOpen(true)}
+        onToggleYtmProfile={() => {
+          setSettingsTab('account');
+          setSettingsOpen(true);
+        }}
       />
+
+      {ipcError && (
+        <div
+          role="alert"
+          className="px-6 py-2 bg-[#F43F5E]/15 border-b border-[#F43F5E]/40 text-xs text-[#FAFAFA] flex items-center justify-between gap-4 shrink-0"
+        >
+          <span className="truncate">{ipcError}</span>
+          <button
+            type="button"
+            onClick={() => setIpcError(null)}
+            className="text-xs font-medium text-[#F43F5E] hover:underline whitespace-nowrap"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <Sidebar
@@ -509,6 +548,7 @@ export function App() {
                 .map((id) => tracks.find((t) => t.video_id === id))
                 .filter((t): t is DemoTrack => Boolean(t))}
               activeTrackId={activeTrackId}
+              isPlaying={isPlaying}
               onPlayTrack={handlePlayTrack}
               onPlayAll={handlePlayAll}
               onShufflePlay={(list) => {
@@ -549,6 +589,7 @@ export function App() {
               albums={DEMO_ALBUMS}
               playlists={playlists}
               activeTrackId={activeTrackId}
+              isPlaying={isPlaying}
               bannerSaved={bannerSaved}
               initialFilter={route.section === 'offline' ? 'Offline' : 'All'}
               onPlayTrack={handlePlayTrack}
@@ -586,7 +627,7 @@ export function App() {
             }}
             onSelectTrack={handlePlayTrack}
             onToggleLike={handleToggleLike}
-            onSeekMs={setCurrentTimeMs}
+            onSeekMs={handleSeek}
             onOpenLyricsView={() => pushRoute({ kind: 'lyrics' })}
           />
         )}
@@ -639,6 +680,7 @@ export function App() {
 
       <SettingsModal
         open={settingsOpen}
+        initialTab={settingsTab}
         settings={settings}
         onClose={() => setSettingsOpen(false)}
         onSave={(next) => {

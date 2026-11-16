@@ -48,6 +48,8 @@ export function InteractiveDropdown<T extends string = string>({
     };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
         setOpen(false);
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -66,10 +68,10 @@ export function InteractiveDropdown<T extends string = string>({
     };
 
     document.addEventListener('mousedown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
     return () => {
       document.removeEventListener('mousedown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [open, highlightedIdx, options, onChange]);
 
