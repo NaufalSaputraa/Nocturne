@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AudioLines,
   CheckCircle2,
@@ -68,20 +68,67 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [cacheNotice, setCacheNotice] = useState<string | null>(null);
   const [ytdlpStatus, setYtdlpStatus] = useState('Up to date • v2026.11.12');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(settings);
+
+  const requestClose = () => {
+    if (isDirty) {
+      setConfirmDiscard(true);
+    } else {
+      onClose();
+    }
+  };
 
   useEffect(() => {
     setDraft(settings);
     setCacheNotice(null);
+    setConfirmDiscard(false);
   }, [settings, open]);
 
   useEffect(() => {
     if (!open) return;
+    const prevFocused = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    const focusables = dialog?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    focusables?.[0]?.focus();
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (isDirty) {
+          setConfirmDiscard(true);
+        } else {
+          onClose();
+        }
+        return;
+      }
+      if (e.key === 'Tab' && dialog) {
+        const list = Array.from(
+          dialog.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ),
+        );
+        if (list.length === 0) return;
+        const first = list[0];
+        const last = list[list.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      prevFocused?.focus?.();
+    };
+  }, [open, isDirty, onClose]);
 
   if (!open) return null;
 
@@ -103,7 +150,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     >
       <Icon
         className={`w-4 h-4 shrink-0 ${
-          tab === id ? 'text-[#F43F5E]' : 'text-[#71717A]'
+          tab === id ? 'text-[#F43F5E]' : 'text-[#8E8E98]'
         }`}
       />
       <span>{label}</span>
@@ -116,11 +163,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       aria-modal="true"
       aria-label="Nocturne Settings"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) requestClose();
       }}
       className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4"
     >
-      <div className="w-[704px] max-w-full h-[544px] max-h-[85vh] bg-[#18181B] border border-[#27272A] rounded-2xl flex overflow-hidden select-none">
+      <div
+        ref={dialogRef}
+        className="w-[704px] max-w-full h-[544px] max-h-[85vh] bg-[#18181B] border border-[#27272A] rounded-2xl flex overflow-hidden select-none"
+      >
         <aside className="w-48 shrink-0 bg-[#121212] border-r border-[#27272A] p-4 flex flex-col justify-between">
           <div className="flex flex-col gap-5">
             <div className="flex items-center gap-2 px-1">
@@ -138,7 +188,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </nav>
           </div>
 
-          <div className="flex flex-col gap-1 text-[11px] text-[#71717A] px-1">
+          <div className="flex flex-col gap-1 text-[11px] text-[#8E8E98] px-1">
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               <span className="font-medium text-[#A1A1AA]">Nocturne Client</span>
@@ -156,7 +206,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {tab === 'engine' && 'Playback Engine & Discord'}
                 {tab === 'account' && 'YouTube Music & Shortcuts'}
               </h3>
-              <p className="text-xs text-[#71717A]">
+              <p className="text-xs text-[#8E8E98]">
                 Configure audio quality, caching, account sync, and shortcuts
               </p>
             </div>
@@ -164,7 +214,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label="Close Settings"
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[#71717A] hover:text-white hover:bg-[#222226] transition-colors"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[#8E8E98] hover:text-white hover:bg-[#222226] transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -188,7 +238,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <p className="text-sm font-medium text-[#FAFAFA]">
                       Normalize Volume
                     </p>
-                    <p className="text-xs text-[#71717A]">
+                    <p className="text-xs text-[#8E8E98]">
                       Balance volume levels automatically across tracks
                     </p>
                   </div>
@@ -218,7 +268,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <span className="text-sm font-medium text-[#FAFAFA]">
                         Track Fade Transition
                       </span>
-                      <span className="text-xs text-[#71717A] ml-2">
+                      <span className="text-xs text-[#8E8E98] ml-2">
                         (Gapless + smooth fade)
                       </span>
                     </div>
@@ -316,7 +366,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     aria-label="Offline downloads folder path"
                     className="bg-[#18181B] border border-[#27272A] rounded-lg px-3 py-1.5 text-xs font-mono text-[#A1A1AA] outline-none"
                   />
-                  <p className="text-[11px] text-[#71717A]">
+                  <p className="text-[11px] text-[#8E8E98]">
                     Explicitly downloaded tracks stay saved even when the stream cache rotates.
                   </p>
                 </div>
@@ -359,7 +409,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <p className="text-sm font-medium text-[#FAFAFA]">
                       Discord Rich Presence
                     </p>
-                    <p className="text-xs text-[#71717A]">
+                    <p className="text-xs text-[#8E8E98]">
                       Show active track, cover art, and remaining time in Discord
                     </p>
                   </div>
@@ -390,6 +440,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="rounded-xl bg-[#121212] border border-[#27272A] overflow-hidden">
                   <button
                     type="button"
+                    aria-expanded={showDiagnostics}
                     onClick={() => setShowDiagnostics((v) => !v)}
                     className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-medium text-[#A1A1AA] hover:text-white"
                   >
@@ -419,7 +470,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <p className="text-sm font-medium text-[#FAFAFA]">
                       YouTube Music Account
                     </p>
-                    <p className="text-xs text-[#71717A] mt-0.5">
+                    <p className="text-xs text-[#8E8E98] mt-0.5">
                       {draft.ytmConnected
                         ? 'Connected — Likes and YouTube Music playlists stay in sync.'
                         : 'Local-only mode. Connect your account to sync Likes & playlists.'}
@@ -481,24 +532,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
           </div>
 
-          <div className="pt-4 border-t border-[#27272A] flex items-center justify-end gap-2.5 shrink-0">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-1.5 rounded-lg bg-[#222226] hover:bg-[#27272A] text-[#FAFAFA] text-xs font-medium transition-colors whitespace-nowrap"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onSave(draft);
-                onClose();
-              }}
-              className="px-4 py-1.5 rounded-lg bg-white hover:bg-[#E4E4E7] text-black text-xs font-semibold transition-colors whitespace-nowrap"
-            >
-              Save Changes
-            </button>
+          <div className="pt-4 border-t border-[#27272A] flex items-center justify-between gap-2.5 shrink-0">
+            <div className="text-xs">
+              {confirmDiscard && (
+                <span className="text-[#F43F5E] font-medium">
+                  Unsaved changes — discard them?
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2.5">
+              {confirmDiscard ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDiscard(false)}
+                    className="px-3.5 py-1.5 rounded-lg bg-[#222226] hover:bg-[#27272A] text-[#FAFAFA] text-xs font-medium transition-colors whitespace-nowrap"
+                  >
+                    Keep Editing
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmDiscard(false);
+                      onClose();
+                    }}
+                    className="px-3.5 py-1.5 rounded-lg bg-[#F43F5E] hover:bg-[#E11D48] text-white text-xs font-semibold transition-colors whitespace-nowrap"
+                  >
+                    Discard
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={requestClose}
+                    className="px-4 py-1.5 rounded-lg bg-[#222226] hover:bg-[#27272A] text-[#FAFAFA] text-xs font-medium transition-colors whitespace-nowrap"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSave(draft);
+                      onClose();
+                    }}
+                    className="px-4 py-1.5 rounded-lg bg-white hover:bg-[#E4E4E7] text-black text-xs font-semibold transition-colors whitespace-nowrap"
+                  >
+                    Save Changes
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </section>
       </div>

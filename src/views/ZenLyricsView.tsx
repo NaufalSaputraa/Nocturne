@@ -34,6 +34,7 @@ export interface ZenLyricsViewProps {
   lyricSource: 'LRCLIB' | 'YouTube Music';
   lyricOffsetMs: number;
   onBack: () => void;
+  onOpenFullQueue?: () => void;
   onTogglePlay: () => void;
   onPrev: () => void;
   onNext: () => void;
@@ -60,6 +61,7 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
   lyricSource,
   lyricOffsetMs,
   onBack,
+  onOpenFullQueue,
   onTogglePlay,
   onPrev,
   onNext,
@@ -356,7 +358,7 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
               </span>
               <button
                 type="button"
-                onClick={onBack}
+                onClick={onOpenFullQueue ?? onBack}
                 className="text-xs text-[#A1A1AA] hover:text-white transition-colors font-medium whitespace-nowrap"
               >
                 Full Queue
@@ -379,7 +381,7 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
                     <p className="text-xs font-semibold text-[#FAFAFA] truncate">
                       {track.title}
                     </p>
-                    <div className="flex items-center justify-between text-[11px] text-[#71717A]">
+                    <div className="flex items-center justify-between text-[11px] text-[#8E8E98]">
                       <span className="truncate">{track.artist}</span>
                       <span className="font-mono tabular-nums ml-1 shrink-0">
                         {formatTimeSec(track.duration_sec)}
@@ -451,7 +453,7 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
             )}
           </div>
 
-          <div className="flex items-center justify-between text-xs text-[#71717A] pt-4 border-t border-[#27272A]/60 z-10">
+          <div className="flex items-center justify-between text-xs text-[#8E8E98] pt-4 border-t border-[#27272A]/60 z-10">
             <span>Synced via {lyricSource} • Click any line to jump</span>
 
             <div className="flex items-center gap-4 text-[#A1A1AA]">
@@ -473,7 +475,7 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
               >
                 <CheckCircle2
                   className={`w-3.5 h-3.5 ${
-                    autoScroll ? 'text-emerald-400' : 'text-[#71717A]'
+                    autoScroll ? 'text-emerald-400' : 'text-[#8E8E98]'
                   }`}
                 />
                 <span>Auto-scroll {autoScroll ? 'ON' : 'OFF'}</span>

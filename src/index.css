@@ -19,7 +19,7 @@ body,
   margin: 0;
   background-color: var(--bg-canvas);
   color: var(--text-primary);
-  font-family: 'Inter', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
   overflow: hidden;
   overscroll-behavior: none;
 }

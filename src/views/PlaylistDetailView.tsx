@@ -186,14 +186,14 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
 
           <div className="flex items-center gap-2 mt-2 text-xs text-[#FAFAFA] flex-wrap">
             <span className="font-medium">Nocturne</span>
-            <span className="text-[#71717A]">•</span>
+            <span className="text-[#8E8E98]">•</span>
             <span className="text-[#F43F5E] font-medium inline-flex items-center gap-1 whitespace-nowrap">
               <BadgeCheck className="w-3.5 h-3.5" />
               {playlist.source === 'ytm' ? 'YouTube Music' : 'Local Library'}
             </span>
-            <span className="text-[#71717A]">•</span>
+            <span className="text-[#8E8E98]">•</span>
             <span className="whitespace-nowrap">{tracks.length} songs</span>
-            <span className="text-[#71717A]">•</span>
+            <span className="text-[#8E8E98]">•</span>
             <span className="text-[#A1A1AA] tabular-nums whitespace-nowrap">
               {durationLabel}
             </span>
@@ -337,7 +337,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
               onClick={() => setLayoutMode('list')}
               aria-label="List view"
               className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
-                layoutMode === 'list' ? 'bg-[#27272A] text-white' : 'text-[#71717A] hover:text-white'
+                layoutMode === 'list' ? 'bg-[#27272A] text-white' : 'text-[#8E8E98] hover:text-white'
               }`}
             >
               <List className="w-4 h-4" />
@@ -347,7 +347,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
               onClick={() => setLayoutMode('grid')}
               aria-label="Grid view"
               className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
-                layoutMode === 'grid' ? 'bg-[#27272A] text-white' : 'text-[#71717A] hover:text-white'
+                layoutMode === 'grid' ? 'bg-[#27272A] text-white' : 'text-[#8E8E98] hover:text-white'
               }`}
             >
               <LayoutGrid className="w-4 h-4" />
@@ -496,7 +496,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
 
                   <div
                     className={`w-16 text-right pr-2 text-xs font-mono tabular-nums ${
-                      isActive ? 'text-[#F43F5E] font-medium' : 'text-[#71717A]'
+                      isActive ? 'text-[#F43F5E] font-medium' : 'text-[#8E8E98]'
                     }`}
                   >
                     {formatTimeSec(track.duration_sec)}

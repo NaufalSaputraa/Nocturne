@@ -126,7 +126,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
         <div className="flex flex-col gap-1">
           {artistTracks.length === 0 ? (
-            <p className="text-sm text-[#71717A] py-6">
+            <p className="text-sm text-[#8E8E98] py-6">
               No cached tracks found for {selectedArtist.name}.
             </p>
           ) : (
@@ -159,7 +159,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                     </p>
                   </div>
                 </div>
-                <span className="text-xs font-mono text-[#71717A] tabular-nums">
+                <span className="text-xs font-mono text-[#8E8E98] tabular-nums">
                   {formatTimeSec(track.duration_sec)}
                 </span>
               </div>
@@ -203,11 +203,11 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
       {!hasAnyResults ? (
         <div className="rounded-2xl bg-[#18181B] border border-[#27272A] p-12 text-center flex flex-col items-center gap-3">
-          <SearchX className="w-8 h-8 text-[#71717A]" />
+          <SearchX className="w-8 h-8 text-[#8E8E98]" />
           <p className="text-sm font-semibold text-[#FAFAFA]">
             No results found for &ldquo;{query.trim()}&rdquo;
           </p>
-          <p className="text-xs text-[#71717A] max-w-sm">
+          <p className="text-xs text-[#8E8E98] max-w-sm">
             Try checking the spelling, searching an artist name, or pasting a direct YouTube Music URL.
           </p>
           <button
@@ -297,7 +297,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                 </div>
 
                 {matchingTracks.length === 0 ? (
-                  <p className="text-xs text-[#71717A] px-1 py-4">
+                  <p className="text-xs text-[#8E8E98] px-1 py-4">
                     No matching songs found.
                   </p>
                 ) : (

@@ -21,6 +21,8 @@ export interface RightPanelProps {
   onToggleLike: (videoId: string) => void;
   onSeekMs: (timeMs: number) => void;
   onOpenLyricsView: () => void;
+  activeTab?: 'queue' | 'lyrics';
+  onTabChange?: (tab: 'queue' | 'lyrics') => void;
 }
 
 export const RightPanel: React.FC<RightPanelProps> = ({
@@ -37,8 +39,15 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   onToggleLike,
   onSeekMs,
   onOpenLyricsView,
+  activeTab: controlledTab,
+  onTabChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<'queue' | 'lyrics'>('queue');
+  const [internalTab, setInternalTab] = useState<'queue' | 'lyrics'>('queue');
+  const activeTab = controlledTab ?? internalTab;
+  const setActiveTab = (tab: 'queue' | 'lyrics') => {
+    setInternalTab(tab);
+    onTabChange?.(tab);
+  };
 
   return (
     <aside className="w-[300px] shrink-0 bg-[#18181B] border-l border-[#27272A] p-4 flex flex-col gap-4 overflow-hidden select-none">
@@ -204,7 +213,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           </div>
           <div className="flex-1 overflow-y-auto space-y-2 pl-5 pr-1">
             {lyrics.length === 0 ? (
-              <p className="text-xs text-[#71717A] py-6 text-center">
+              <p className="text-xs text-[#8E8E98] py-6 text-center">
                 No synced lyrics available for this track.
               </p>
             ) : (

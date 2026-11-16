@@ -190,7 +190,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     className={`flex-1 py-1 rounded whitespace-nowrap ${
                       newPlaylistSource === 'local'
                         ? 'bg-[#27272A] text-white'
-                        : 'text-[#71717A] hover:text-white'
+                        : 'text-[#8E8E98] hover:text-white'
                     }`}
                   >
                     Local
@@ -201,7 +201,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     className={`flex-1 py-1 rounded whitespace-nowrap ${
                       newPlaylistSource === 'ytm'
                         ? 'bg-[#27272A] text-white'
-                        : 'text-[#71717A] hover:text-white'
+                        : 'text-[#8E8E98] hover:text-white'
                     }`}
                   >
                     YTM Sync
@@ -258,7 +258,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   )}
                 >
                   <span className="flex items-center gap-2.5 min-w-0">
-                    <ListMusic className="w-4 h-4 shrink-0 text-[#71717A]" />
+                    <ListMusic className="w-4 h-4 shrink-0 text-[#8E8E98]" />
                     <span className="truncate">{playlist.name}</span>
                   </span>
                 </button>

@@ -359,7 +359,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
                       <div
                         className={`col-span-1 flex items-center justify-end text-xs font-mono tabular-nums ${
-                          isActive ? 'text-[#F43F5E] font-medium' : 'text-[#71717A]'
+                          isActive ? 'text-[#F43F5E] font-medium' : 'text-[#8E8E98]'
                         }`}
                       >
                         {formatTimeSec(track.duration_sec)}

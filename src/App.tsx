@@ -55,6 +55,7 @@ export function App() {
   const [historyIdx, setHistoryIdx] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [showRightPanel, setShowRightPanel] = useState(true);
+  const [rightPanelTab, setRightPanelTab] = useState<'queue' | 'lyrics'>('queue');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bannerSaved, setBannerSaved] = useState(false);
 
@@ -298,7 +299,7 @@ export function App() {
       if (nextOffline) {
         void tauriApi.downloadTrack(
           target,
-          settings.audioQuality === 'AAC 128kbps' ? 'aac_128' : 'opus_160',
+          settings.audioQuality.toLowerCase().includes('m4a') ? 'aac_128' : 'opus_160',
         );
       } else {
         void tauriApi.removeOfflineTrack(videoId);
@@ -379,6 +380,15 @@ export function App() {
               ? setHistoryIdx(historyIdx - 1)
               : pushRoute({ kind: 'nav', section: 'home' })
           }
+          onOpenFullQueue={() => {
+            setRightPanelTab('queue');
+            setShowRightPanel(true);
+            if (historyIdx > 0) {
+              setHistoryIdx(historyIdx - 1);
+            } else {
+              pushRoute({ kind: 'nav', section: 'home' });
+            }
+          }}
           onTogglePlay={handleTogglePlay}
           onPrev={handlePrev}
           onNext={handleNext}
@@ -561,6 +571,8 @@ export function App() {
             autoplayEnabled={autoplayEnabled}
             currentTimeMs={currentTimeMs}
             lyrics={DEMO_ZEN_LYRICS}
+            activeTab={rightPanelTab}
+            onTabChange={setRightPanelTab}
             onToggleAutoplay={() => setAutoplayEnabled((v) => !v)}
             onClearQueue={() => {
               setClearedQueueBackup(queueIds);
