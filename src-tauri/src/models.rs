@@ -66,12 +66,81 @@ impl Default for PlaybackSession {
     }
 }
 
+/// Single word/syllable timestamp inside an Enhanced LRC line.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LyricWord {
+    pub start_time_ms: u64,
+    pub end_time_ms: u64,
+    pub text: String,
+}
+
 /// Single timed lyric line in milliseconds.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LyricLine {
     pub start_time_ms: u64,
     pub end_time_ms: u64,
     pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub words: Option<Vec<LyricWord>>,
+}
+
+/// Persisted application settings stored in SQLite `app_settings`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PersistedSettings {
+    pub audio_quality: String,
+    pub normalize_volume: bool,
+    pub crossfade_sec: u64,
+    pub lru_cache_path: String,
+    pub lru_limit_gb: f64,
+    pub offline_downloads_path: String,
+    pub discord_rpc_enabled: bool,
+    pub prefer_ytdlp: bool,
+    pub close_to_tray: bool,
+}
+
+impl Default for PersistedSettings {
+    fn default() -> Self {
+        Self {
+            audio_quality: "auto".to_string(),
+            normalize_volume: true,
+            crossfade_sec: 4,
+            lru_cache_path: String::new(),
+            lru_limit_gb: 2.0,
+            offline_downloads_path: String::new(),
+            discord_rpc_enabled: true,
+            prefer_ytdlp: false,
+            close_to_tray: false,
+        }
+    }
+}
+
+/// Live storage & cache telemetry returned to the Settings modal.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StorageStats {
+    pub cache_used_bytes: u64,
+    pub cache_limit_bytes: u64,
+    pub cache_file_count: usize,
+    pub cache_path: String,
+    pub downloads_path: String,
+    pub offline_track_count: usize,
+    pub offline_total_bytes: u64,
+}
+
+/// Live audio & extractor engine diagnostics returned to the Settings modal.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EngineDiagnostics {
+    pub mpv_active: bool,
+    pub ytdlp_available: bool,
+    pub ytdlp_version: String,
+    pub prefer_ytdlp: bool,
+    pub memory_cache_entries: usize,
+}
+
+/// Current YouTube Music authentication & sync status.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct YtmAccountStatus {
+    pub connected: bool,
+    pub pending_sync_count: i64,
 }
 
 /// Synced lyrics response including source identifier and per-track timing offset.

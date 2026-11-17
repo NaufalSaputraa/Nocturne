@@ -48,6 +48,11 @@ impl MemoryStreamCache {
         let mut guard = self.entries.write().await;
         guard.clear();
     }
+
+    /// Returns the number of cached stream URL entries in memory.
+    pub async fn len(&self) -> usize {
+        self.entries.read().await.len()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -61,7 +66,7 @@ struct DiskEntry {
 #[derive(Debug)]
 pub struct LruDiskCache {
     dir: PathBuf,
-    max_bytes: u64,
+    max_bytes: AtomicU64,
     seq_counter: AtomicU64,
     entries: std::sync::RwLock<HashMap<String, DiskEntry>>,
 }
@@ -72,7 +77,7 @@ impl LruDiskCache {
         std::fs::create_dir_all(&dir)?;
         let cache = Self {
             dir,
-            max_bytes,
+            max_bytes: AtomicU64::new(max_bytes),
             seq_counter: AtomicU64::new(1),
             entries: std::sync::RwLock::new(HashMap::new()),
         };
@@ -162,11 +167,12 @@ impl LruDiskCache {
         guard: &mut HashMap<String, DiskEntry>,
         protected_id: Option<&str>,
     ) {
-        if self.max_bytes == 0 {
+        let max = self.max_bytes.load(Ordering::SeqCst);
+        if max == 0 {
             return;
         }
         let mut total_bytes: u64 = guard.values().map(|e| e.size_bytes).sum();
-        while total_bytes > self.max_bytes {
+        while total_bytes > max {
             let victim = guard
                 .iter()
                 .filter(|(id, _)| Some(id.as_str()) != protected_id)
@@ -202,6 +208,32 @@ impl LruDiskCache {
             .read()
             .map(|guard| guard.values().map(|e| e.size_bytes).sum())
             .unwrap_or(0)
+    }
+
+    /// Returns the number of cached files on disk.
+    pub fn file_count(&self) -> usize {
+        self.entries.read().map(|guard| guard.len()).unwrap_or(0)
+    }
+
+    /// Returns the configured maximum byte limit.
+    pub fn max_bytes(&self) -> u64 {
+        self.max_bytes.load(Ordering::SeqCst)
+    }
+
+    /// Updates the maximum byte limit and evicts oldest entries if needed.
+    pub fn set_max_bytes(&self, new_max_bytes: u64) -> Result<(), AppError> {
+        self.max_bytes.store(new_max_bytes, Ordering::SeqCst);
+        let mut guard = self
+            .entries
+            .write()
+            .map_err(|e| AppError::Other(format!("LRU lock poisoned: {e}")))?;
+        self.evict_if_needed_locked(&mut guard, None);
+        Ok(())
+    }
+
+    /// Returns the cache directory path.
+    pub fn dir(&self) -> &PathBuf {
+        &self.dir
     }
 }
 

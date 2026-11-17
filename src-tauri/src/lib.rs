@@ -6,6 +6,7 @@ pub mod metadata;
 pub mod models;
 pub mod os;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -13,7 +14,7 @@ use tauri::{Emitter, Manager, WindowEvent};
 
 use crate::audio::engine::{AudioBackend, BackendState, MpvAudioEngine};
 use crate::audio::worker::{spawn_audio_worker_with_deps, AudioCommand, PlaybackEventSink};
-use crate::commands::{flush_worker_session_blocking, AppState};
+use crate::commands::{flush_worker_session_blocking, load_persisted_settings, AppState};
 use crate::db::session::SessionPersistence;
 use crate::db::sqlite::init_db;
 use crate::extractor::cache::{LruDiskCache, MemoryStreamCache};
@@ -123,9 +124,23 @@ pub fn run() {
             let pool = tauri::async_runtime::block_on(init_db(&db_path))
                 .expect("failed to initialize Nocturne SQLite database");
 
+            let default_cache_dir = data_dir.join("cache");
+            let default_downloads_dir = data_dir.join("downloads");
+            let persisted_settings = tauri::async_runtime::block_on(load_persisted_settings(
+                &pool,
+                &default_cache_dir.to_string_lossy(),
+                &default_downloads_dir.to_string_lossy(),
+            ));
+
+            let cache_limit_bytes =
+                (persisted_settings.lru_limit_gb.max(0.5) * 1024.0 * 1024.0 * 1024.0) as u64;
             let disk_cache = Arc::new(
-                LruDiskCache::new(data_dir.join("cache"), 2 * 1024 * 1024 * 1024)
-                    .expect("failed to initialize LRU disk cache"),
+                LruDiskCache::new(
+                    std::path::PathBuf::from(&persisted_settings.lru_cache_path),
+                    cache_limit_bytes,
+                )
+                .or_else(|_| LruDiskCache::new(default_cache_dir, cache_limit_bytes))
+                .expect("failed to initialize LRU disk cache"),
             );
             let memory_cache = Arc::new(MemoryStreamCache::new());
             let ytdlp = Arc::new(YtdlpSidecar::resolve_default(resource_dir.as_deref()));
@@ -135,39 +150,58 @@ pub fn run() {
                 Arc::clone(&memory_cache),
                 Some(Arc::clone(&disk_cache)),
             ));
+            extractor.set_prefer_fallback(persisted_settings.prefer_ytdlp);
 
             let catalog = Arc::new(RustypipeCatalogProvider::new());
-            let backend: Box<dyn AudioBackend> = match MpvAudioEngine::new(resource_dir.as_deref()) {
-                Ok(mpv) => Box::new(mpv),
-                Err(err) => {
-                    eprintln!("[Nocturne] libmpv-2.dll unavailable ({err}); using fallback audio backend");
-                    Box::new(NoopAudioBackend::default())
-                }
-            };
+            let (backend, mpv_active): (Box<dyn AudioBackend>, bool) =
+                match MpvAudioEngine::new(resource_dir.as_deref()) {
+                    Ok(mpv) => {
+                        eprintln!("[Nocturne] MpvAudioEngine initialized");
+                        (Box::new(mpv), true)
+                    }
+                    Err(err) => {
+                        eprintln!("[Nocturne] libmpv-2.dll unavailable ({err}); using fallback audio backend");
+                        (Box::new(NoopAudioBackend::default()), false)
+                    }
+                };
 
-            let smtc_holder: Arc<Mutex<MediaControlsBridge>> = Arc::new(Mutex::new({
-                let (dummy_tx, _) = tokio::sync::mpsc::channel(1);
-                MediaControlsBridge::new_optional(None, dummy_tx)
-            }));
+            let smtc_holder: Arc<Mutex<MediaControlsBridge>> =
+                Arc::new(Mutex::new(MediaControlsBridge::disabled()));
 
             let sink = Arc::new(TauriEventSink {
                 app: app_handle.clone(),
                 smtc: Arc::clone(&smtc_holder),
             });
 
-            let audio_tx = spawn_audio_worker_with_deps(
-                backend,
-                Arc::clone(&extractor),
-                sink.clone(),
-                "opus_160".to_string(),
-                0.8,
-                Some(SessionPersistence::new(pool.clone())),
-                Some(catalog.clone()),
-            );
+            let audio_tx = tauri::async_runtime::block_on(async {
+                spawn_audio_worker_with_deps(
+                    backend,
+                    Arc::clone(&extractor),
+                    sink.clone(),
+                    persisted_settings.audio_quality.clone(),
+                    0.8,
+                    Some(SessionPersistence::new(pool.clone())),
+                    Some(catalog.clone()),
+                )
+            });
+            let _ = audio_tx.try_send(AudioCommand::SetNormalization(
+                persisted_settings.normalize_volume,
+            ));
+            let _ = audio_tx.try_send(AudioCommand::SetCrossfadeMs(
+                persisted_settings.crossfade_sec * 1000,
+            ));
 
-            // Re-bind SMTC bridge with live `audio_tx`.
+            // Re-bind SMTC bridge with live `audio_tx` and main window HWND on Windows.
+            #[cfg(target_os = "windows")]
+            let hwnd = app
+                .get_webview_window("main")
+                .and_then(|win| win.hwnd().ok())
+                .map(|h| h.0 as *mut std::ffi::c_void);
+            #[cfg(not(target_os = "windows"))]
+            let hwnd: Option<*mut std::ffi::c_void> = None;
+
             if let Ok(mut guard) = smtc_holder.lock() {
-                *guard = MediaControlsBridge::new_optional(None, audio_tx.clone());
+                *guard = MediaControlsBridge::new_optional(hwnd, audio_tx.clone());
             }
 
             let sync_engine = Arc::new(SyncEngine::new(
@@ -182,15 +216,28 @@ pub fn run() {
                     pool.clone(),
                     Arc::clone(&extractor),
                     sink,
-                    data_dir.join("downloads"),
+                    std::path::PathBuf::from(&persisted_settings.offline_downloads_path),
                 )
+                .or_else(|_| {
+                    DownloadManager::new(
+                        pool.clone(),
+                        Arc::clone(&extractor),
+                        Arc::new(TauriEventSink {
+                            app: app_handle.clone(),
+                            smtc: Arc::clone(&smtc_holder),
+                        }),
+                        data_dir.join("downloads"),
+                    )
+                })
                 .expect("failed to initialize DownloadManager"),
             );
 
             let discord_rpc = Arc::new(Mutex::new(DiscordRpcBridge::new(
                 Box::new(DiscordIpcClient::new("1234567890123456789")),
-                true,
+                persisted_settings.discord_rpc_enabled,
             )));
+
+            let close_to_tray = Arc::new(AtomicBool::new(persisted_settings.close_to_tray));
 
             app.manage(AppState {
                 pool: pool.clone(),
@@ -200,10 +247,13 @@ pub fn run() {
                 ytm_lyrics_provider: Arc::new(RustypipeYtmLyricsProvider::new()),
                 sync_engine,
                 download_manager,
+                extractor,
                 disk_cache,
                 memory_cache,
                 ytdlp,
                 discord_rpc,
+                mpv_active,
+                close_to_tray,
             });
 
             // System Tray setup: Show/Hide, Play/Pause, Next, Quit
@@ -250,12 +300,17 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { .. } = event {
+            if let WindowEvent::CloseRequested { api, .. } = event {
                 let st = window.state::<AppState>();
-                tauri::async_runtime::block_on(flush_worker_session_blocking(
-                    &st.pool,
-                    &st.audio_tx,
-                ));
+                if st.close_to_tray.load(Ordering::SeqCst) {
+                    api.prevent_close();
+                    let _ = window.hide();
+                } else {
+                    tauri::async_runtime::block_on(flush_worker_session_blocking(
+                        &st.pool,
+                        &st.audio_tx,
+                    ));
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -275,6 +330,12 @@ pub fn run() {
             commands::set_autoplay,
             commands::set_normalization,
             commands::set_crossfade_ms,
+            commands::set_audio_quality,
+            commands::get_settings,
+            commands::save_settings,
+            commands::get_storage_stats,
+            commands::get_engine_diagnostics,
+            commands::get_ytm_account_status,
             commands::restore_session,
             commands::get_synced_lyrics,
             commands::set_lyric_offset,

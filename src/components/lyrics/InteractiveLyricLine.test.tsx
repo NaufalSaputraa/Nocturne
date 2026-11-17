@@ -8,4 +8,14 @@ describe('InteractiveLyricLine', () => {
     expect(res.words.length).toBe(1);
     expect(res.words[0].length).toBe(4);
   });
+
+  it('uses exact Enhanced LRC word timestamps when timedWords are provided', () => {
+    const res = computeLyricSweep('Hello world', 1_000, 5_000, [
+      { start_time_ms: 1_000, end_time_ms: 1_500, text: 'Hello ' },
+      { start_time_ms: 2_000, end_time_ms: 2_800, text: 'world' },
+    ]);
+    expect(res.words.length).toBe(2);
+    expect(res.words[0][0].charStart).toBe(1_000);
+    expect(res.words[1][0].charStart).toBe(2_000);
+  });
 });

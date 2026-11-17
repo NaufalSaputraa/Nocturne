@@ -5,7 +5,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::audio::engine::{compute_preamp_volume_scale, AudioBackend};
 use crate::db::session::SessionPersistence;
-use crate::extractor::stream::DualTierExtractor;
+use crate::extractor::stream::{normalize_quality_key, DualTierExtractor};
 use crate::metadata::search::{deduplicate_radio_tracks, CatalogProvider};
 use crate::models::{PlaybackSession, PlaybackSyncPayload, TrackMetadata};
 
@@ -24,6 +24,7 @@ pub enum AudioCommand {
     SetAutoplay(bool),
     SetNormalization(bool),
     SetCrossfadeMs(u64),
+    SetQuality(String),
     AppendRadioTracks(Vec<TrackMetadata>),
     GetSnapshot(oneshot::Sender<WorkerSnapshot>),
     Shutdown,
@@ -71,6 +72,7 @@ struct WorkerState {
     catalog: Option<Arc<dyn CatalogProvider>>,
     auto_radio_in_flight: bool,
     played_ids: HashSet<String>,
+    retried_fallback_for_track: Option<String>,
 }
 
 impl WorkerState {
@@ -135,25 +137,59 @@ impl WorkerState {
         self.current_track = Some(track.clone());
         self.played_ids.insert(track.video_id.clone());
         self.prefetched_for_index = None;
+        self.retried_fallback_for_track = None;
         self.sink.emit_track_changed(Some(track.clone()));
 
-        match self
+        let resolved = match self
             .extractor
             .resolve_stream(&track.video_id, &self.quality)
             .await
         {
+            Ok(stream) => Ok(stream),
+            Err(primary_err) if normalize_quality_key(&self.quality) != "opus_128" => {
+                eprintln!(
+                    "[Nocturne] Stream extraction failed at {} ({primary_err}); falling back to opus_128",
+                    self.quality
+                );
+                self.extractor.resolve_stream(&track.video_id, "opus_128").await
+            }
+            Err(err) => Err(err),
+        };
+
+        match resolved {
             Ok(stream) => {
+                eprintln!(
+                    "[Nocturne] Playing {} via {:?} ({})",
+                    track.video_id, stream.source, stream.format
+                );
                 self.preamp_scale = compute_preamp_volume_scale(
                     stream.perceptual_loudness_db,
                     self.normalize_enabled,
                 );
-                let _ = self
+                if let Err(err) = self
                     .backend
-                    .load_and_play(&stream.url, self.preamp_scale, self.volume);
+                    .load_and_play(&stream.url, self.preamp_scale, self.volume)
+                {
+                    eprintln!("[Nocturne] load_and_play error for {}: {err}", track.video_id);
+                    if normalize_quality_key(&self.quality) != "opus_128" {
+                        if let Ok(fallback_stream) = self
+                            .extractor
+                            .resolve_stream(&track.video_id, "opus_128")
+                            .await
+                        {
+                            let _ = self.backend.load_and_play(
+                                &fallback_stream.url,
+                                self.preamp_scale,
+                                self.volume,
+                            );
+                        }
+                    }
+                }
                 self.emit_sync_now();
                 self.flush_session_now().await;
             }
-            Err(_) => {
+            Err(err) => {
+                eprintln!("[Nocturne] resolve_stream failed for {}: {err}", track.video_id);
                 let _ = self.backend.stop();
                 self.emit_sync_now();
                 self.flush_session_now().await;
@@ -231,7 +267,9 @@ impl WorkerState {
         }
 
         let next_index = if self.shuffle && self.queue.len() > 1 {
-            (self.current_index + 1) % self.queue.len()
+            let nanos = chrono::Utc::now().timestamp_subsec_nanos() as usize;
+            let offset = (nanos % (self.queue.len() - 1)) + 1;
+            (self.current_index + offset) % self.queue.len()
         } else if self.current_index + 1 < self.queue.len() {
             self.current_index + 1
         } else if self.repeat_mode == "all" {
@@ -334,6 +372,7 @@ pub fn spawn_audio_worker_with_deps(
             catalog,
             auto_radio_in_flight: false,
             played_ids: HashSet::new(),
+            retried_fallback_for_track: None,
         };
 
         let mut ticker = tokio::time::interval(Duration::from_millis(500));
@@ -343,6 +382,34 @@ pub fn spawn_audio_worker_with_deps(
             tokio::select! {
                 _ = ticker.tick() => {
                     let st = state.backend.poll_state();
+                    if st.playback_failed {
+                        if let Some(track) = state.current_track.clone() {
+                            if state.retried_fallback_for_track.as_deref() != Some(&track.video_id) {
+                                state.retried_fallback_for_track = Some(track.video_id.clone());
+                                eprintln!(
+                                    "[Nocturne] Playback failed in mpv for {} (likely HTTP 403); retrying via yt-dlp fallback",
+                                    track.video_id
+                                );
+                                if let Ok(stream) = state
+                                    .extractor
+                                    .resolve_with_fallback_only(&track.video_id, &state.quality)
+                                    .await
+                                {
+                                    state.preamp_scale = compute_preamp_volume_scale(
+                                        stream.perceptual_loudness_db,
+                                        state.normalize_enabled,
+                                    );
+                                    let _ = state.backend.load_and_play(
+                                        &stream.url,
+                                        state.preamp_scale,
+                                        state.volume,
+                                    );
+                                    state.emit_sync_now();
+                                    continue;
+                                }
+                            }
+                        }
+                    }
                     if st.eof_reached {
                         state.advance_next(true).await;
                         continue;
@@ -417,6 +484,10 @@ pub fn spawn_audio_worker_with_deps(
                         }
                         AudioCommand::SetCrossfadeMs(ms) => {
                             state.crossfade_ms = ms;
+                        }
+                        AudioCommand::SetQuality(q) => {
+                            state.quality = normalize_quality_key(&q).to_string();
+                            state.prefetched_for_index = None;
                         }
                         AudioCommand::AppendRadioTracks(tracks) => {
                             state.auto_radio_in_flight = false;

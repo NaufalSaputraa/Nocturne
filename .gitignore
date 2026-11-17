@@ -2,9 +2,11 @@ node_modules/
 dist/
 src-tauri/target/
 .superpowers/
+.impeccable/
 *.db
 *.db-shm
 *.db-wal
 
+src-tauri/rustypipe_cache.json
 src-tauri/binaries/*.dll
 src-tauri/binaries/*.exe

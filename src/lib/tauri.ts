@@ -2,14 +2,18 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type {
   DownloadProgressPayload,
+  EngineDiagnostics,
   LyricsPayload,
   OfflineTrackEntry,
+  PersistedSettings,
   PlaybackSession,
   PlaybackSyncPayload,
   PlaylistSummary,
   SearchResult,
+  StorageStats,
   SyncStatusPayload,
   TrackMetadata,
+  YtmAccountStatus,
 } from '../types/nocturne';
 
 export function isTauriRuntime(): boolean {
@@ -47,6 +51,14 @@ export const tauriApi = {
     safeInvoke<void>('set_normalization', { enabled }),
   setCrossfadeMs: (crossfadeMs: number) =>
     safeInvoke<void>('set_crossfade_ms', { crossfadeMs }),
+  setAudioQuality: (quality: string) =>
+    safeInvoke<void>('set_audio_quality', { quality }),
+  getSettings: () => safeInvoke<PersistedSettings>('get_settings'),
+  saveSettings: (settings: PersistedSettings) =>
+    safeInvoke<void>('save_settings', { settings }),
+  getStorageStats: () => safeInvoke<StorageStats>('get_storage_stats'),
+  getEngineDiagnostics: () => safeInvoke<EngineDiagnostics>('get_engine_diagnostics'),
+  getYtmAccountStatus: () => safeInvoke<YtmAccountStatus>('get_ytm_account_status'),
   restoreSession: () => safeInvoke<PlaybackSession>('restore_session'),
   getSyncedLyrics: (
     videoId: string,

@@ -23,12 +23,15 @@ import {
   type NocturneSettings,
   type SettingsTab,
 } from './components/modals/SettingsModal';
+import { TrackDetailModal } from './components/modals/TrackDetailModal';
+import type { SearchResult } from './types/nocturne';
 import {
   DEMO_ALBUMS,
   DEMO_ARTISTS,
   DEMO_PLAYLISTS,
   DEMO_TRACKS,
   DEMO_ZEN_LYRICS,
+  type DemoLyricLine,
   type DemoPlaylist,
   type DemoTrack,
 } from './data/mockLibrary';
@@ -47,9 +50,26 @@ function routesEqual(a: ActiveRoute, b: ActiveRoute): boolean {
   return true;
 }
 
+const EMPTY_TRACK: DemoTrack = {
+  video_id: '',
+  title: 'No track selected',
+  artist: 'Search YouTube Music to play',
+  album: '',
+  year: new Date().getFullYear(),
+  date_added: '',
+  duration_sec: 0,
+  thumbnail_url: '',
+  accentColor: '#F43F5E',
+  liked: false,
+  offline: false,
+};
+
 export function App() {
-  const [tracks, setTracks] = useState<DemoTrack[]>(DEMO_TRACKS);
-  const [playlists, setPlaylists] = useState<DemoPlaylist[]>(DEMO_PLAYLISTS);
+  const inTauri = isTauriRuntime();
+  const [tracks, setTracks] = useState<DemoTrack[]>(() => (inTauri ? [] : DEMO_TRACKS));
+  const [playlists, setPlaylists] = useState<DemoPlaylist[]>(() =>
+    inTauri ? [] : DEMO_PLAYLISTS,
+  );
   const [history, setHistory] = useState<ActiveRoute[]>([
     { kind: 'nav', section: 'home' },
   ]);
@@ -59,42 +79,142 @@ export function App() {
   const [rightPanelTab, setRightPanelTab] = useState<'queue' | 'lyrics'>('queue');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('audio');
+  const [inspectedTrack, setInspectedTrack] = useState<DemoTrack | null>(null);
+  const [remoteSearchResult, setRemoteSearchResult] = useState<SearchResult | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [ipcError, setIpcError] = useState<string | null>(null);
   const [bannerSaved, setBannerSaved] = useState(false);
 
-  const [activeTrackId, setActiveTrackId] = useState<string>(DEMO_TRACKS[0].video_id);
-  const [playHistoryIds, setPlayHistoryIds] = useState<string[]>([
-    DEMO_TRACKS[0].video_id,
-    DEMO_TRACKS[1].video_id,
-  ]);
-  const [queueIds, setQueueIds] = useState<string[]>(
-    DEMO_TRACKS.slice(1, 7).map((t) => t.video_id),
+  const [activeTrackId, setActiveTrackId] = useState<string>(() =>
+    inTauri ? '' : DEMO_TRACKS[0].video_id,
+  );
+  const [playHistoryIds, setPlayHistoryIds] = useState<string[]>(() =>
+    inTauri ? [] : [DEMO_TRACKS[0].video_id, DEMO_TRACKS[1].video_id],
+  );
+  const [queueIds, setQueueIds] = useState<string[]>(() =>
+    inTauri ? [] : DEMO_TRACKS.slice(1, 7).map((t) => t.video_id),
   );
   const [clearedQueueBackup, setClearedQueueBackup] = useState<string[] | null>(null);
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [currentTimeMs, setCurrentTimeMs] = useState(84_000);
+  const [isPlaying, setIsPlaying] = useState(() => !inTauri);
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => (inTauri ? 0 : 84_000));
   const [shuffle, setShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState<'off' | 'all' | 'one'>('all');
   const [autoplayEnabled, setAutoplayEnabled] = useState(true);
   const [volume, setVolume] = useState(0.65);
   const [muted, setMuted] = useState(false);
   const [lyricOffsetMs, setLyricOffsetMs] = useState(0);
+  const [lyricsLines, setLyricsLines] = useState<DemoLyricLine[]>(() =>
+    inTauri ? [] : DEMO_ZEN_LYRICS,
+  );
+  const [lyricSource, setLyricSource] = useState<'LRCLIB' | 'YouTube Music' | 'None'>(() =>
+    inTauri ? 'None' : 'LRCLIB',
+  );
 
   const [settings, setSettings] = useState<NocturneSettings>({
-    audioQuality: 'Opus 160kbps',
+    audioQuality: 'auto',
     normalizeVolume: true,
     crossfadeSec: 4,
-    lruCachePath: 'C:\\Users\\Naufal\\Music\\NocturneCache',
-    lruLimitGb: 5.0,
-    offlineDownloadsPath: 'C:\\Users\\Naufal\\Music\\NocturneOffline',
+    lruCachePath: '',
+    lruLimitGb: 2.0,
+    offlineDownloadsPath: '',
     discordRpcEnabled: true,
-    ytmConnected: true,
+    preferYtdlp: false,
+    closeToTray: false,
+    ytmConnected: !inTauri,
   });
 
   const route = history[historyIdx];
   const currentTrack =
-    tracks.find((t) => t.video_id === activeTrackId) ?? tracks[0];
+    tracks.find((t) => t.video_id === activeTrackId) ?? tracks[0] ?? EMPTY_TRACK;
   const durationMs = currentTrack.duration_sec * 1000;
+
+  const likedIdSet = new Set(tracks.filter((t) => t.liked).map((t) => t.video_id));
+  const offlineIdSet = new Set(tracks.filter((t) => t.offline).map((t) => t.video_id));
+  const liveInspectedTrack = inspectedTrack
+    ? tracks.find((t) => t.video_id === inspectedTrack.video_id) ?? inspectedTrack
+    : null;
+
+  useEffect(() => {
+    if (!inTauri || !currentTrack.video_id) {
+      if (inTauri) {
+        setLyricsLines([]);
+        setLyricSource('None');
+      }
+      return;
+    }
+
+    let cancelled = false;
+    setLyricsLines([]);
+    void tauriApi
+      .getSyncedLyrics(
+        currentTrack.video_id,
+        currentTrack.title,
+        currentTrack.artist,
+        currentTrack.duration_sec,
+      )
+      .then((payload) => {
+        if (cancelled || !payload) return;
+        setLyricsLines(payload.lines);
+        setLyricOffsetMs(payload.offset_ms);
+        setLyricSource(
+          payload.source === 'lrclib'
+            ? 'LRCLIB'
+            : payload.source === 'ytm'
+              ? 'YouTube Music'
+              : 'None',
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLyricsLines([]);
+        setLyricSource('None');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    inTauri,
+    currentTrack.video_id,
+    currentTrack.title,
+    currentTrack.artist,
+    currentTrack.duration_sec,
+  ]);
+
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (!isTauriRuntime() || trimmed.length === 0) {
+      setRemoteSearchResult(null);
+      setIsSearching(false);
+      setSearchError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setIsSearching(true);
+    setSearchError(null);
+
+    const timer = window.setTimeout(() => {
+      void tauriApi
+        .searchCatalog(trimmed)
+        .then((res) => {
+          if (cancelled) return;
+          setRemoteSearchResult(res);
+          setIsSearching(false);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setSearchError(`YouTube Music search failed: ${String(err)}`);
+          setIsSearching(false);
+        });
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [searchQuery]);
 
   const queueTracks = queueIds
     .map((id) => tracks.find((t) => t.video_id === id))
@@ -116,31 +236,101 @@ export function App() {
     let unlisten: (() => void) | undefined;
 
     void (async () => {
-      const [session, feed, liked, offline] = await Promise.all([
-        tauriApi.restoreSession(),
-        tauriApi.getHomeFeed(),
-        tauriApi.listLikedSongs(),
-        tauriApi.listOfflineTracks(),
-      ]);
+      const [session, feed, liked, offline, dbPlaylists, persistedSettings, ytmStatus] =
+        await Promise.all([
+          tauriApi.restoreSession().catch(() => null),
+          tauriApi.getHomeFeed().catch(() => null),
+          tauriApi.listLikedSongs().catch(() => null),
+          tauriApi.listOfflineTracks().catch(() => null),
+          tauriApi.listPlaylists().catch(() => null),
+          tauriApi.getSettings().catch(() => null),
+          tauriApi.getYtmAccountStatus().catch(() => null),
+        ]);
 
-      if (feed && feed.length > 0) {
-        const likedSet = new Set((liked ?? []).map((t) => t.video_id));
-        const offlineSet = new Set((offline ?? []).map((t) => t.video_id));
-        setTracks(
-          feed.map((t) => ({
-            ...t,
-            album: t.album ?? 'Single',
-            year: new Date().getFullYear(),
-            date_added: 'Today',
-            accentColor: '#F43F5E',
-            liked: likedSet.has(t.video_id),
-            offline: offlineSet.has(t.video_id),
+      if (persistedSettings || ytmStatus) {
+        setSettings((prev) => ({
+          ...prev,
+          ...(persistedSettings
+            ? {
+                audioQuality: persistedSettings.audio_quality,
+                normalizeVolume: persistedSettings.normalize_volume,
+                crossfadeSec: persistedSettings.crossfade_sec,
+                lruCachePath: persistedSettings.lru_cache_path,
+                lruLimitGb: persistedSettings.lru_limit_gb,
+                offlineDownloadsPath: persistedSettings.offline_downloads_path,
+                discordRpcEnabled: persistedSettings.discord_rpc_enabled,
+                preferYtdlp: persistedSettings.prefer_ytdlp,
+                closeToTray: persistedSettings.close_to_tray,
+              }
+            : {}),
+          ytmConnected: ytmStatus?.connected ?? prev.ytmConnected,
+        }));
+      }
+
+      const demoIdSet = new Set(DEMO_TRACKS.map((t) => t.video_id));
+      const likedSet = new Set(
+        (liked ?? []).filter((t) => !demoIdSet.has(t.video_id)).map((t) => t.video_id),
+      );
+      const offlineSet = new Set(
+        (offline ?? []).filter((t) => !demoIdSet.has(t.video_id)).map((t) => t.video_id),
+      );
+
+      const mergedMap = new Map<string, DemoTrack>();
+      const addTrack = (
+        t: {
+          video_id: string;
+          title: string;
+          artist: string;
+          album: string | null;
+          duration_sec: number;
+          thumbnail_url: string;
+        },
+        dateAdded = 'Today',
+      ) => {
+        if (!t.video_id || demoIdSet.has(t.video_id) || mergedMap.has(t.video_id)) return;
+        mergedMap.set(t.video_id, {
+          ...t,
+          album: t.album ?? 'Single',
+          year: new Date().getFullYear(),
+          date_added: dateAdded,
+          accentColor: '#F43F5E',
+          liked: likedSet.has(t.video_id),
+          offline: offlineSet.has(t.video_id),
+        });
+      };
+
+      for (const t of feed ?? []) addTrack(t, 'YouTube Music');
+      for (const t of liked ?? []) addTrack(t, 'Liked');
+      for (const t of offline ?? []) addTrack(t, 'Offline');
+      if (session?.current_track && !demoIdSet.has(session.current_track.video_id)) {
+        addTrack(session.current_track, 'Session');
+      }
+      for (const t of session?.queue ?? []) addTrack(t, 'Queue');
+
+      if (mergedMap.size > 0) {
+        setTracks(Array.from(mergedMap.values()));
+      }
+
+      if (dbPlaylists && dbPlaylists.length > 0) {
+        const fallbackCover = (feed?.[0] ?? liked?.[0])?.thumbnail_url ?? '';
+        setPlaylists(
+          dbPlaylists.map((p) => ({
+            id: String(p.id),
+            name: p.name,
+            description:
+              p.source === 'ytm'
+                ? 'Synced with your YouTube Music library.'
+                : 'Saved in your local library.',
+            source: p.source === 'ytm' ? 'ytm' : 'local',
+            curator: p.source === 'ytm' ? 'YouTube Music' : 'Local Library',
+            cover_url: fallbackCover,
+            tracks: [],
           })),
         );
       }
 
       if (session) {
-        if (session.current_track) {
+        if (session.current_track && !demoIdSet.has(session.current_track.video_id)) {
           setActiveTrackId(session.current_track.video_id);
         }
         setCurrentTimeMs(session.position_ms);
@@ -273,7 +463,16 @@ export function App() {
     setPlayHistoryIds((prev) => [videoId, ...prev.filter((id) => id !== videoId)]);
   };
 
+  const upsertTracks = (incoming: DemoTrack[]) => {
+    setTracks((prev) => {
+      const existingIds = new Set(prev.map((t) => t.video_id));
+      const additions = incoming.filter((t) => !existingIds.has(t.video_id));
+      return additions.length > 0 ? [...prev, ...additions] : prev;
+    });
+  };
+
   const handlePlayTrack = (track: DemoTrack) => {
+    upsertTracks([track]);
     setActiveTrackId(track.video_id);
     recordTrackPlay(track.video_id);
     setCurrentTimeMs(0);
@@ -284,6 +483,7 @@ export function App() {
 
   const handlePlayAll = (list: DemoTrack[]) => {
     if (list.length === 0) return;
+    upsertTracks(list);
     setActiveTrackId(list[0].video_id);
     recordTrackPlay(list[0].video_id);
     setQueueIds(list.slice(1).map((t) => t.video_id));
@@ -293,6 +493,13 @@ export function App() {
     resetClockAnchorForSeek(0);
     void tauriApi.setQueue(list, 0);
     void tauriApi.playTrack(list[0]);
+  };
+
+  const handleAddToQueue = (track: DemoTrack) => {
+    upsertTracks([track]);
+    setQueueIds((prev) =>
+      prev.includes(track.video_id) ? prev : [...prev, track.video_id],
+    );
   };
 
   const handleToggleLike = (videoId: string) => {
@@ -389,8 +596,8 @@ export function App() {
           shuffle={shuffle}
           repeatMode={repeatMode}
           upNext={queueTracks}
-          lyrics={DEMO_ZEN_LYRICS}
-          lyricSource="LRCLIB"
+          lyrics={lyricsLines}
+          lyricSource={lyricSource}
           lyricOffsetMs={lyricOffsetMs}
           onBack={() =>
             historyIdx > 0
@@ -406,6 +613,7 @@ export function App() {
               pushRoute({ kind: 'nav', section: 'home' });
             }
           }}
+          onInspectTrack={(track) => setInspectedTrack(track)}
           onTogglePlay={handleTogglePlay}
           onPrev={handlePrev}
           onNext={handleNext}
@@ -440,6 +648,24 @@ export function App() {
           onClose={() => setSettingsOpen(false)}
           onSave={setSettings}
         />
+        <TrackDetailModal
+          track={liveInspectedTrack}
+          onClose={() => setInspectedTrack(null)}
+          onPlayTrack={handlePlayTrack}
+          onAddToQueue={handleAddToQueue}
+          onToggleLike={(videoId) => {
+            if (liveInspectedTrack) upsertTracks([liveInspectedTrack]);
+            handleToggleLike(videoId);
+          }}
+          onToggleOffline={(videoId) => {
+            if (liveInspectedTrack) upsertTracks([liveInspectedTrack]);
+            handleToggleOffline(videoId);
+          }}
+          onOpenLyrics={(track) => {
+            handlePlayTrack(track);
+            pushRoute({ kind: 'lyrics' });
+          }}
+        />
       </>
     );
   }
@@ -464,7 +690,7 @@ export function App() {
         .map((id) => tracks.find((t) => t.video_id === id))
         .filter((t): t is DemoTrack => Boolean(t));
     }
-    if (section === 'explore') return tracks.slice(4);
+    if (section === 'explore') return tracks.length > 4 ? tracks.slice(4) : tracks;
     if (section === 'trending') return [...tracks].reverse();
     return tracks;
   };
@@ -528,9 +754,14 @@ export function App() {
             <SearchView
               query={searchQuery}
               tracks={tracks}
-              albums={DEMO_ALBUMS}
-              artists={DEMO_ARTISTS}
+              albums={inTauri ? [] : DEMO_ALBUMS}
+              artists={inTauri ? [] : DEMO_ARTISTS}
               playlists={playlists}
+              remoteResult={remoteSearchResult}
+              isSearching={isSearching}
+              searchError={searchError}
+              likedIds={likedIdSet}
+              offlineIds={offlineIdSet}
               onPlayTrack={handlePlayTrack}
               onPlayAll={handlePlayAll}
               onToggleLike={handleToggleLike}
@@ -538,6 +769,7 @@ export function App() {
                 pushRoute({ kind: 'playlist', playlistId })
               }
               onClearSearch={() => setSearchQuery('')}
+              onInspectTrack={(track) => setInspectedTrack(track)}
             />
           )}
 
@@ -571,6 +803,7 @@ export function App() {
                 setPlaylists((prev) => prev.filter((p) => p.id !== id));
                 pushRoute({ kind: 'nav', section: 'home' });
               }}
+              onInspectTrack={(track) => setInspectedTrack(track)}
             />
           )}
 
@@ -586,11 +819,13 @@ export function App() {
                       : route.section.charAt(0).toUpperCase() + route.section.slice(1)
               }
               tracks={getSectionTracks(route.section)}
-              albums={DEMO_ALBUMS}
+              albums={inTauri ? [] : DEMO_ALBUMS}
               playlists={playlists}
               activeTrackId={activeTrackId}
               isPlaying={isPlaying}
               bannerSaved={bannerSaved}
+              bannerTitle={inTauri ? 'YouTube Music Top & Trending' : undefined}
+              bannerCoverUrl={inTauri ? tracks[0]?.thumbnail_url : undefined}
               initialFilter={route.section === 'offline' ? 'Offline' : 'All'}
               onPlayTrack={handlePlayTrack}
               onPlayAll={handlePlayAll}
@@ -600,6 +835,7 @@ export function App() {
               onSelectPlaylist={(playlistId) =>
                 pushRoute({ kind: 'playlist', playlistId })
               }
+              onInspectTrack={(track) => setInspectedTrack(track)}
             />
           )}
         </main>
@@ -611,7 +847,8 @@ export function App() {
             canUndoClear={clearedQueueBackup !== null}
             autoplayEnabled={autoplayEnabled}
             currentTimeMs={currentTimeMs}
-            lyrics={DEMO_ZEN_LYRICS}
+            lyrics={lyricsLines}
+            lyricOffsetMs={lyricOffsetMs}
             activeTab={rightPanelTab}
             onTabChange={setRightPanelTab}
             onToggleAutoplay={() => setAutoplayEnabled((v) => !v)}
@@ -629,6 +866,7 @@ export function App() {
             onToggleLike={handleToggleLike}
             onSeekMs={handleSeek}
             onOpenLyricsView={() => pushRoute({ kind: 'lyrics' })}
+            onInspectTrack={(track) => setInspectedTrack(track)}
           />
         )}
       </div>
@@ -676,6 +914,26 @@ export function App() {
         onToggleLike={handleToggleLike}
         onOpenZenMode={() => pushRoute({ kind: 'lyrics' })}
         onToggleRightPanel={() => setShowRightPanel((v) => !v)}
+        onInspectTrack={(track) => setInspectedTrack(track)}
+      />
+
+      <TrackDetailModal
+        track={liveInspectedTrack}
+        onClose={() => setInspectedTrack(null)}
+        onPlayTrack={handlePlayTrack}
+        onAddToQueue={handleAddToQueue}
+        onToggleLike={(videoId) => {
+          if (liveInspectedTrack) upsertTracks([liveInspectedTrack]);
+          handleToggleLike(videoId);
+        }}
+        onToggleOffline={(videoId) => {
+          if (liveInspectedTrack) upsertTracks([liveInspectedTrack]);
+          handleToggleOffline(videoId);
+        }}
+        onOpenLyrics={(track) => {
+          handlePlayTrack(track);
+          pushRoute({ kind: 'lyrics' });
+        }}
       />
 
       <SettingsModal
@@ -683,11 +941,22 @@ export function App() {
         initialTab={settingsTab}
         settings={settings}
         onClose={() => setSettingsOpen(false)}
+        onYtmStatusChanged={(ytmConnected) =>
+          setSettings((prev) => ({ ...prev, ytmConnected }))
+        }
         onSave={(next) => {
           setSettings(next);
-          void tauriApi.setNormalization(next.normalizeVolume);
-          void tauriApi.setCrossfadeMs(next.crossfadeSec * 1000);
-          void tauriApi.setDiscordRpcEnabled(next.discordRpcEnabled);
+          void tauriApi.saveSettings({
+            audio_quality: next.audioQuality,
+            normalize_volume: next.normalizeVolume,
+            crossfade_sec: next.crossfadeSec,
+            lru_cache_path: next.lruCachePath,
+            lru_limit_gb: next.lruLimitGb,
+            offline_downloads_path: next.offlineDownloadsPath,
+            discord_rpc_enabled: next.discordRpcEnabled,
+            prefer_ytdlp: next.preferYtdlp,
+            close_to_tray: next.closeToTray,
+          });
         }}
       />
     </div>

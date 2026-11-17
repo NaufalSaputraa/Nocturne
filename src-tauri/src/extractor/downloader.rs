@@ -52,6 +52,11 @@ impl DownloadManager {
         })
     }
 
+    /// Returns the configured offline downloads directory path.
+    pub fn download_dir(&self) -> &PathBuf {
+        &self.download_dir
+    }
+
     /// Downloads `track` into `download_dir`, emits `download-progress` events,
     /// and indexes it in SQLite `offline_downloads`.
     pub async fn download_track(

@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Heart,
+  Info,
   ListMusic,
   Mic2,
   Pause,
@@ -14,6 +15,7 @@ import {
   VolumeX,
 } from 'lucide-react';
 import { formatTimeSec, type DemoTrack } from '../../data/mockLibrary';
+import { ArtworkImage } from '../ui/ArtworkImage';
 
 export interface PlayerDockProps {
   currentTrack: DemoTrack;
@@ -36,6 +38,7 @@ export interface PlayerDockProps {
   onToggleLike: (videoId: string) => void;
   onOpenZenMode: () => void;
   onToggleRightPanel: () => void;
+  onInspectTrack?: (track: DemoTrack) => void;
 }
 
 export const PlayerDock: React.FC<PlayerDockProps> = ({
@@ -59,6 +62,7 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
   onToggleLike,
   onOpenZenMode,
   onToggleRightPanel,
+  onInspectTrack,
 }) => {
   const progressPct =
     durationMs > 0 ? Math.min(100, Math.max(0, (currentTimeMs / durationMs) * 100)) : 0;
@@ -73,17 +77,24 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
     <footer className="h-20 w-full bg-[#18181B] border-t border-[#27272A] shrink-0 px-6 flex items-center justify-between select-none z-40">
       {/* Left: Currently Playing Song (25%) */}
       <div className="w-1/4 flex items-center gap-3 min-w-0">
-        <img
-          src={currentTrack.thumbnail_url}
-          alt={currentTrack.title}
-          className="w-12 h-12 rounded-md aspect-square object-cover shrink-0 border border-[#27272A]"
-        />
-        <div className="flex flex-col min-w-0">
-          <span className="text-sm font-medium text-[#FAFAFA] truncate">
-            {currentTrack.title}
-          </span>
-          <span className="text-xs text-[#A1A1AA] truncate">{currentTrack.artist}</span>
-        </div>
+        <button
+          type="button"
+          onClick={() => onInspectTrack?.(currentTrack)}
+          title="View track details"
+          className="flex items-center gap-3 min-w-0 text-left group rounded-lg hover:bg-[#222226]/60 pr-2 py-1 transition-colors"
+        >
+          <ArtworkImage
+            src={currentTrack.thumbnail_url}
+            alt={currentTrack.title}
+            className="w-12 h-12 rounded-md aspect-square object-cover shrink-0 border border-[#27272A]"
+          />
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-medium text-[#FAFAFA] group-hover:text-white truncate">
+              {currentTrack.title}
+            </span>
+            <span className="text-xs text-[#A1A1AA] truncate">{currentTrack.artist}</span>
+          </div>
+        </button>
         <button
           type="button"
           onClick={() => onToggleLike(currentTrack.video_id)}
@@ -96,6 +107,17 @@ export const PlayerDock: React.FC<PlayerDockProps> = ({
         >
           <Heart className={`w-4 h-4 ${currentTrack.liked ? 'fill-[#F43F5E]' : ''}`} />
         </button>
+        {onInspectTrack && (
+          <button
+            type="button"
+            onClick={() => onInspectTrack(currentTrack)}
+            aria-label={`Details for ${currentTrack.title}`}
+            title="Track details"
+            className="p-1.5 rounded-lg text-[#8E8E98] hover:text-white hover:bg-[#222226] transition-colors shrink-0"
+          >
+            <Info className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Center: Transport Controls & Scrub Bar (50%) */}

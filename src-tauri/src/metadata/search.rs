@@ -48,6 +48,10 @@ fn map_track(item: &TrackItem) -> TrackMetadata {
         .map(|a| a.name.as_str())
         .collect::<Vec<_>>()
         .join(", ");
+    let mut thumb = best_thumb(&item.cover);
+    if thumb.is_empty() && !item.id.is_empty() {
+        thumb = format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", item.id);
+    }
     TrackMetadata {
         video_id: item.id.clone(),
         title: item.name.clone(),
@@ -58,7 +62,7 @@ fn map_track(item: &TrackItem) -> TrackMetadata {
         },
         album: item.album.as_ref().map(|a| a.name.clone()),
         duration_sec: item.duration.unwrap_or(0) as u64,
-        thumbnail_url: best_thumb(&item.cover),
+        thumbnail_url: thumb,
     }
 }
 
@@ -173,19 +177,30 @@ impl CatalogProvider for RustypipeCatalogProvider {
     }
 
     async fn get_home_feed(&self) -> Result<Vec<TrackMetadata>, AppError> {
-        let charts = self
-            .client
-            .query()
-            .music_charts(None)
-            .await
-            .map_err(|e| AppError::Extraction(format!("music_charts failed: {e}")))?;
-
-        let mut tracks: Vec<TrackMetadata> = charts.top_tracks.iter().map(map_track).collect();
-        for t in &charts.trending_tracks {
-            if !tracks.iter().any(|existing| existing.video_id == t.id) {
-                tracks.push(map_track(t));
+        let mut tracks: Vec<TrackMetadata> = Vec::new();
+        for region in [Some(rustypipe::param::Country::Id), None] {
+            if let Ok(charts) = self.client.query().music_charts(region).await {
+                for t in charts.top_tracks.iter().chain(charts.trending_tracks.iter()) {
+                    if !tracks.iter().any(|existing| existing.video_id == t.id) {
+                        tracks.push(map_track(t));
+                    }
+                }
+                if !tracks.is_empty() {
+                    break;
+                }
             }
         }
+
+        if tracks.is_empty() {
+            let search = self
+                .client
+                .query()
+                .music_search_tracks("lagu indonesia hits")
+                .await
+                .map_err(|e| AppError::Extraction(format!("get_home_feed fallback failed: {e}")))?;
+            tracks = search.items.items.iter().map(map_track).collect();
+        }
+
         Ok(tracks)
     }
 

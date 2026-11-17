@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Heart, Mic2, Radio, RotateCcw } from 'lucide-react';
 import {
   formatTimeSec,
-  type DemoLyricLine,
   type DemoTrack,
 } from '../../data/mockLibrary';
+import type { LyricLine } from '../../types/nocturne';
 import { InteractiveLyricLine } from '../lyrics/InteractiveLyricLine';
+import { ArtworkImage } from '../ui/ArtworkImage';
 
 export interface RightPanelProps {
   currentTrack: DemoTrack;
@@ -13,7 +14,8 @@ export interface RightPanelProps {
   canUndoClear: boolean;
   autoplayEnabled: boolean;
   currentTimeMs: number;
-  lyrics: DemoLyricLine[];
+  lyrics: LyricLine[];
+  lyricOffsetMs?: number;
   onToggleAutoplay: () => void;
   onClearQueue: () => void;
   onUndoClearQueue: () => void;
@@ -21,6 +23,7 @@ export interface RightPanelProps {
   onToggleLike: (videoId: string) => void;
   onSeekMs: (timeMs: number) => void;
   onOpenLyricsView: () => void;
+  onInspectTrack?: (track: DemoTrack) => void;
   activeTab?: 'queue' | 'lyrics';
   onTabChange?: (tab: 'queue' | 'lyrics') => void;
 }
@@ -32,6 +35,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   autoplayEnabled,
   currentTimeMs,
   lyrics,
+  lyricOffsetMs = 0,
   onToggleAutoplay,
   onClearQueue,
   onUndoClearQueue,
@@ -39,6 +43,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   onToggleLike,
   onSeekMs,
   onOpenLyricsView,
+  onInspectTrack,
   activeTab: controlledTab,
   onTabChange,
 }) => {
@@ -48,6 +53,17 @@ export const RightPanel: React.FC<RightPanelProps> = ({
     setInternalTab(tab);
     onTabChange?.(tab);
   };
+  const activeLyricRef = useRef<HTMLDivElement>(null);
+  const effectiveTimeMs = currentTimeMs + lyricOffsetMs;
+  const activeLyricIdx = lyrics.findIndex(
+    (line) => effectiveTimeMs >= line.start_time_ms && effectiveTimeMs < line.end_time_ms,
+  );
+
+  useEffect(() => {
+    if (activeTab === 'lyrics' && activeLyricRef.current?.scrollIntoView) {
+      activeLyricRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [activeLyricIdx, activeTab]);
 
   return (
     <aside className="w-[300px] shrink-0 bg-[#18181B] border-l border-[#27272A] p-4 flex flex-col gap-4 overflow-hidden select-none">
@@ -86,8 +102,22 @@ export const RightPanel: React.FC<RightPanelProps> = ({
       </div>
 
       {/* Compact Now Playing Header Card */}
-      <div className="flex items-center gap-3 p-2.5 rounded-xl bg-[#121212] border border-[#27272A] shrink-0">
-        <img
+      <div
+        role={onInspectTrack ? 'button' : undefined}
+        tabIndex={onInspectTrack ? 0 : undefined}
+        onClick={() => onInspectTrack?.(currentTrack)}
+        onKeyDown={(e) => {
+          if (onInspectTrack && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onInspectTrack(currentTrack);
+          }
+        }}
+        title={onInspectTrack ? 'View track details' : undefined}
+        className={`flex items-center gap-3 p-2.5 rounded-xl bg-[#121212] border border-[#27272A] shrink-0 ${
+          onInspectTrack ? 'cursor-pointer hover:bg-[#222226]/70 transition-colors' : ''
+        }`}
+      >
+        <ArtworkImage
           src={currentTrack.thumbnail_url}
           alt={currentTrack.title}
           className="w-12 h-12 rounded-lg aspect-square object-cover shrink-0"
@@ -177,7 +207,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                   onClick={() => onSelectTrack(track)}
                   className="w-full flex items-center gap-3 p-1.5 rounded-lg hover:bg-[#222226] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 transition-colors text-left group"
                 >
-                  <img
+                  <ArtworkImage
                     src={track.thumbnail_url}
                     alt={track.title}
                     className="w-10 h-10 rounded-md aspect-square object-cover shrink-0"
@@ -217,22 +247,26 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                 No synced lyrics available for this track.
               </p>
             ) : (
-              lyrics.map((line) => {
-                const isActive =
-                  currentTimeMs >= line.start_time_ms && currentTimeMs < line.end_time_ms;
-                const isPast = currentTimeMs >= line.end_time_ms;
+              lyrics.map((line, idx) => {
+                const isActive = idx === activeLyricIdx;
+                const isPast = effectiveTimeMs >= line.end_time_ms;
                 return (
-                  <InteractiveLyricLine
+                  <div
                     key={line.start_time_ms}
-                    text={line.text}
-                    startTimeMs={line.start_time_ms}
-                    endTimeMs={line.end_time_ms}
-                    currentTimeMs={currentTimeMs}
-                    isActive={isActive}
-                    isPast={isPast}
-                    fontSizeClass="text-sm"
-                    onClickLine={onSeekMs}
-                  />
+                    ref={isActive ? activeLyricRef : undefined}
+                  >
+                    <InteractiveLyricLine
+                      text={line.text}
+                      startTimeMs={line.start_time_ms}
+                      endTimeMs={line.end_time_ms}
+                      currentTimeMs={effectiveTimeMs}
+                      isActive={isActive}
+                      isPast={isPast}
+                      words={line.words}
+                      fontSizeClass="text-sm"
+                      onClickLine={(t) => onSeekMs(Math.max(0, t - lyricOffsetMs))}
+                    />
+                  </div>
                 );
               })
             )}

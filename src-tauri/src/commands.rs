@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use sqlx::{Row, SqlitePool};
 use tauri::State;
@@ -7,6 +8,7 @@ use crate::audio::worker::{AudioCommand, WorkerSnapshot};
 use crate::db::session::SessionPersistence;
 use crate::extractor::cache::{LruDiskCache, MemoryStreamCache};
 use crate::extractor::downloader::{DownloadManager, OfflineTrackEntry};
+use crate::extractor::stream::DualTierExtractor;
 use crate::extractor::ytdlp::YtdlpSidecar;
 use crate::metadata::lyrics::{
     get_synced_lyrics as fetch_synced_lyrics, set_lyric_offset as persist_lyric_offset,
@@ -15,7 +17,8 @@ use crate::metadata::lyrics::{
 use crate::metadata::search::{CatalogProvider, RustypipeCatalogProvider};
 use crate::metadata::sync::{PlaylistSummary, SyncEngine};
 use crate::models::{
-    AppError, LyricsPayload, PlaybackSession, SearchResult, TrackMetadata,
+    AppError, EngineDiagnostics, LyricsPayload, PersistedSettings, PlaybackSession, SearchResult,
+    StorageStats, TrackMetadata, YtmAccountStatus,
 };
 use crate::os::discord_rpc::DiscordRpcBridge;
 
@@ -28,10 +31,13 @@ pub struct AppState {
     pub ytm_lyrics_provider: Arc<RustypipeYtmLyricsProvider>,
     pub sync_engine: Arc<SyncEngine>,
     pub download_manager: Arc<DownloadManager>,
+    pub extractor: Arc<DualTierExtractor>,
     pub disk_cache: Arc<LruDiskCache>,
     pub memory_cache: Arc<MemoryStreamCache>,
     pub ytdlp: Arc<YtdlpSidecar>,
     pub discord_rpc: Arc<Mutex<DiscordRpcBridge>>,
+    pub mpv_active: bool,
+    pub close_to_tray: Arc<AtomicBool>,
 }
 
 #[tauri::command]
@@ -190,6 +196,141 @@ pub async fn set_crossfade_ms(
         .send(AudioCommand::SetCrossfadeMs(crossfade_ms))
         .await
         .map_err(|e| AppError::Audio(e.to_string()))
+}
+
+#[tauri::command]
+pub async fn set_audio_quality(
+    state: State<'_, AppState>,
+    quality: String,
+) -> Result<(), AppError> {
+    state
+        .audio_tx
+        .send(AudioCommand::SetQuality(quality))
+        .await
+        .map_err(|e| AppError::Audio(e.to_string()))
+}
+
+pub async fn load_persisted_settings(
+    pool: &SqlitePool,
+    default_cache_path: &str,
+    default_downloads_path: &str,
+) -> PersistedSettings {
+    let row = sqlx::query("SELECT settings_json FROM app_settings WHERE id = 1")
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+    let mut settings = row
+        .and_then(|r| r.try_get::<String, _>("settings_json").ok())
+        .and_then(|json| serde_json::from_str::<PersistedSettings>(&json).ok())
+        .unwrap_or_default();
+    if settings.lru_cache_path.is_empty() {
+        settings.lru_cache_path = default_cache_path.to_string();
+    }
+    if settings.offline_downloads_path.is_empty() {
+        settings.offline_downloads_path = default_downloads_path.to_string();
+    }
+    settings
+}
+
+#[tauri::command]
+pub async fn get_settings(state: State<'_, AppState>) -> Result<PersistedSettings, AppError> {
+    let cache_dir = state.disk_cache.dir().to_string_lossy().to_string();
+    let downloads_dir = state
+        .download_manager
+        .download_dir()
+        .to_string_lossy()
+        .to_string();
+    Ok(load_persisted_settings(&state.pool, &cache_dir, &downloads_dir).await)
+}
+
+#[tauri::command]
+pub async fn save_settings(
+    state: State<'_, AppState>,
+    settings: PersistedSettings,
+) -> Result<(), AppError> {
+    let json = serde_json::to_string(&settings)?;
+    sqlx::query(
+        r#"
+        INSERT INTO app_settings (id, settings_json, updated_at)
+        VALUES (1, ?1, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+            settings_json = excluded.settings_json,
+            updated_at = CURRENT_TIMESTAMP
+        "#,
+    )
+    .bind(&json)
+    .execute(&state.pool)
+    .await?;
+
+    let _ = state
+        .audio_tx
+        .send(AudioCommand::SetQuality(settings.audio_quality.clone()))
+        .await;
+    let _ = state
+        .audio_tx
+        .send(AudioCommand::SetNormalization(settings.normalize_volume))
+        .await;
+    let _ = state
+        .audio_tx
+        .send(AudioCommand::SetCrossfadeMs(settings.crossfade_sec * 1000))
+        .await;
+
+    let limit_bytes = (settings.lru_limit_gb.max(0.5) * 1024.0 * 1024.0 * 1024.0) as u64;
+    let _ = state.disk_cache.set_max_bytes(limit_bytes);
+    state.extractor.set_prefer_fallback(settings.prefer_ytdlp);
+    state
+        .close_to_tray
+        .store(settings.close_to_tray, Ordering::SeqCst);
+
+    if let Ok(mut rpc) = state.discord_rpc.lock() {
+        rpc.set_enabled(settings.discord_rpc_enabled);
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_storage_stats(state: State<'_, AppState>) -> Result<StorageStats, AppError> {
+    let offline = state.download_manager.list_offline_tracks().await?;
+    let offline_total_bytes = offline.iter().map(|t| t.file_size_bytes).sum();
+    Ok(StorageStats {
+        cache_used_bytes: state.disk_cache.total_bytes(),
+        cache_limit_bytes: state.disk_cache.max_bytes(),
+        cache_file_count: state.disk_cache.file_count(),
+        cache_path: state.disk_cache.dir().to_string_lossy().to_string(),
+        downloads_path: state
+            .download_manager
+            .download_dir()
+            .to_string_lossy()
+            .to_string(),
+        offline_track_count: offline.len(),
+        offline_total_bytes,
+    })
+}
+
+#[tauri::command]
+pub async fn get_engine_diagnostics(
+    state: State<'_, AppState>,
+) -> Result<EngineDiagnostics, AppError> {
+    let (ytdlp_available, ytdlp_version) = match state.ytdlp.get_version().await {
+        Ok(ver) => (true, ver),
+        Err(err) => (false, err.to_string()),
+    };
+    Ok(EngineDiagnostics {
+        mpv_active: state.mpv_active,
+        ytdlp_available,
+        ytdlp_version,
+        prefer_ytdlp: state.extractor.prefer_fallback(),
+        memory_cache_entries: state.memory_cache.len().await,
+    })
+}
+
+#[tauri::command]
+pub async fn get_ytm_account_status(
+    state: State<'_, AppState>,
+) -> Result<YtmAccountStatus, AppError> {
+    state.sync_engine.account_status().await
 }
 
 #[tauri::command]

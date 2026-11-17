@@ -3,14 +3,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { SettingsModal, type NocturneSettings } from './SettingsModal';
 
 const BASE_SETTINGS: NocturneSettings = {
-  audioQuality: 'Opus 160kbps',
+  audioQuality: 'auto',
   normalizeVolume: true,
   crossfadeSec: 4,
   lruCachePath: 'C:\\Music\\NocturneCache',
   lruLimitGb: 5,
   offlineDownloadsPath: 'C:\\Music\\NocturneOffline',
   discordRpcEnabled: true,
-  ytmConnected: true,
+  preferYtdlp: false,
+  closeToTray: false,
+  ytmConnected: false,
 };
 
 describe('SettingsModal', () => {

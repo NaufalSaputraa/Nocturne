@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import type { LyricWord } from '../../types/nocturne';
 
 export interface SweptChar {
   char: string;
@@ -11,29 +12,77 @@ export interface LyricSweepResult {
   words: SweptChar[][];
 }
 
+function charWeight(ch: string): number {
+  if (ch === ',' || ch === ';' || ch === '—') return 1.8;
+  if (ch === '.' || ch === '!' || ch === '?') return 2.2;
+  if (ch === ' ') return 0.55;
+  return 1.0;
+}
+
 /**
- * Computes per-character karaoke timing while capping sweep speed at 90ms/char
- * so short lines before long instrumental interludes animate at natural vocal cadence.
+ * Computes per-character karaoke timing. Uses exact Enhanced LRC word timestamps
+ * when available, and falls back to punctuation-weighted interpolation capped at
+ * 90ms/char so short lines before long instrumental interludes animate naturally.
  */
 export function computeLyricSweep(
   text: string,
   startTimeMs: number,
   endTimeMs: number,
+  timedWords?: LyricWord[],
 ): LyricSweepResult {
+  if (timedWords && timedWords.length > 0) {
+    const words: SweptChar[][] = [];
+    for (const tw of timedWords) {
+      const wordDur = Math.max(tw.end_time_ms - tw.start_time_ms, 40);
+      const parts = tw.text.split(' ');
+      let cursor = 0;
+      const totalLen = Math.max(tw.text.length, 1);
+      for (const part of parts) {
+        if (!part) {
+          cursor++;
+          continue;
+        }
+        const chars = part.split('').map((char) => {
+          const charStart = tw.start_time_ms + (cursor / totalLen) * wordDur;
+          const charEnd = tw.start_time_ms + ((cursor + 1.2) / totalLen) * wordDur;
+          cursor++;
+          return { char, charStart, charEnd };
+        });
+        cursor++;
+        words.push(chars);
+      }
+    }
+    const lastEnd = timedWords[timedWords.length - 1]?.end_time_ms ?? endTimeMs;
+    return {
+      activeSweepDuration: Math.max(lastEnd - startTimeMs, 1),
+      words,
+    };
+  }
+
   const totalChars = Math.max(text.length, 1);
   const totalDuration = Math.max(endTimeMs - startTimeMs, 200);
-  const activeSweepDuration = Math.min(totalDuration * 0.88, text.length * 90);
+  const activeSweepDuration = Math.min(totalDuration * 0.88, totalChars * 90);
 
-  let globalCharIndex = 0;
-  const words = text.split(' ').map((word) => {
+  const rawWords = text.split(' ');
+  const totalWeight = Math.max(
+    text.split('').reduce((acc, ch) => acc + charWeight(ch), 0),
+    1,
+  );
+
+  let elapsedWeight = 0;
+  const words = rawWords.map((word, wIdx) => {
     const chars = word.split('').map((char) => {
-      const charStart = startTimeMs + (globalCharIndex / totalChars) * activeSweepDuration;
+      const w = charWeight(char);
+      const charStart = startTimeMs + (elapsedWeight / totalWeight) * activeSweepDuration;
       const charEnd =
-        startTimeMs + ((globalCharIndex + 1.8) / totalChars) * activeSweepDuration;
-      globalCharIndex++;
+        startTimeMs +
+        ((elapsedWeight + Math.max(w * 1.5, 1.2)) / totalWeight) * activeSweepDuration;
+      elapsedWeight += w;
       return { char, charStart, charEnd };
     });
-    globalCharIndex++;
+    if (wIdx < rawWords.length - 1) {
+      elapsedWeight += charWeight(' ');
+    }
     return chars;
   });
 
@@ -47,6 +96,7 @@ export interface InteractiveLyricLineProps {
   currentTimeMs: number;
   isActive: boolean;
   isPast: boolean;
+  words?: LyricWord[];
   fontSizeClass?: string;
   onClickLine?: (timeMs: number) => void;
 }
@@ -58,12 +108,13 @@ export const InteractiveLyricLine: React.FC<InteractiveLyricLineProps> = ({
   currentTimeMs,
   isActive,
   isPast,
+  words: timedWords,
   fontSizeClass = 'text-2xl',
   onClickLine,
 }) => {
   const { words } = useMemo(
-    () => computeLyricSweep(text, startTimeMs, endTimeMs),
-    [text, startTimeMs, endTimeMs],
+    () => computeLyricSweep(text, startTimeMs, endTimeMs, timedWords),
+    [text, startTimeMs, endTimeMs, timedWords],
   );
 
   return (
@@ -117,7 +168,7 @@ export const InteractiveLyricLine: React.FC<InteractiveLyricLineProps> = ({
                           ? 'rgba(142, 142, 152, 0.85)'
                           : 'rgba(161, 161, 170, 0.6)',
                   }}
-                  className="inline-block will-change-transform transition-[color] duration-75"
+                  className="inline-block will-change-transform"
                 >
                   {item.char}
                 </span>

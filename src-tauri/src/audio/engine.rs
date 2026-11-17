@@ -13,6 +13,7 @@ pub struct BackendState {
     pub is_playing: bool,
     pub is_buffering: bool,
     pub eof_reached: bool,
+    pub playback_failed: bool,
 }
 
 /// Configures Windows DLL search paths so `libmpv-2.dll` bundled inside Tauri's
@@ -115,6 +116,7 @@ pub struct MpvAudioEngine {
     mpv_set_property: MpvSetPropertyFn,
     mpv_get_property: MpvGetPropertyFn,
     has_active_track: bool,
+    pending_volume: Option<f64>,
 }
 
 // SAFETY: `MpvAudioEngine` is exclusively owned by the single-threaded audio worker actor
@@ -198,9 +200,14 @@ impl MpvAudioEngine {
             for (key, val) in [
                 ("vo", "null"),
                 ("vid", "no"),
+                ("idle", "yes"),
                 ("gapless-audio", "yes"),
                 ("ytdl", "no"),
                 ("cache", "yes"),
+                ("volume-max", "150"),
+                ("tls-verify", "no"),
+                ("terminal", "yes"),
+                ("msg-level", "all=warn"),
             ] {
                 let k = CString::new(key).map_err(|e| AppError::Audio(e.to_string()))?;
                 let v = CString::new(val).map_err(|e| AppError::Audio(e.to_string()))?;
@@ -223,6 +230,7 @@ impl MpvAudioEngine {
                 mpv_set_property,
                 mpv_get_property,
                 has_active_track: false,
+                pending_volume: None,
             })
         }
     }
@@ -339,10 +347,10 @@ impl AudioBackend for MpvAudioEngine {
         preamp_scale: f64,
         initial_volume: f32,
     ) -> Result<(), AppError> {
-        self.set_volume(initial_volume, preamp_scale)?;
         self.run_command(&["loadfile", url, "replace"])?;
         self.set_paused(false)?;
         self.has_active_track = true;
+        let _ = self.set_volume(initial_volume, preamp_scale);
         Ok(())
     }
 
@@ -357,7 +365,19 @@ impl AudioBackend for MpvAudioEngine {
 
     fn set_volume(&mut self, volume: f32, preamp_scale: f64) -> Result<(), AppError> {
         let effective = ((volume.clamp(0.0, 1.0) as f64) * 100.0 * preamp_scale).clamp(0.0, 150.0);
-        self.set_double("volume", effective)
+        match self.set_double("volume", effective) {
+            Ok(()) => {
+                self.pending_volume = None;
+                Ok(())
+            }
+            // `MPV_ERROR_PROPERTY_UNAVAILABLE` (-9) occurs when mpv's audio output
+            // isn't active yet (idle/loading). Defer and apply in `poll_state()`.
+            Err(AppError::Audio(ref msg)) if msg.contains("(-9)") => {
+                self.pending_volume = Some(effective);
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
     }
 
     fn stop(&mut self) -> Result<(), AppError> {
@@ -366,11 +386,21 @@ impl AudioBackend for MpvAudioEngine {
     }
 
     fn poll_state(&mut self) -> BackendState {
+        if let Some(vol) = self.pending_volume {
+            if self.set_double("volume", vol).is_ok() {
+                self.pending_volume = None;
+            }
+        }
         let pos_sec = self.get_double("time-pos").unwrap_or(0.0).max(0.0);
         let dur_sec = self.get_double("duration").unwrap_or(0.0).max(0.0);
         let paused = self.get_flag("pause").unwrap_or(true);
         let buffering = self.get_flag("paused-for-cache").unwrap_or(false);
         let eof = self.has_active_track && self.get_flag("eof-reached").unwrap_or(false);
+        let idle_active = self.get_flag("idle-active").unwrap_or(false);
+        let playback_failed = self.has_active_track && idle_active && dur_sec == 0.0 && !eof;
+        if playback_failed {
+            self.has_active_track = false;
+        }
 
         BackendState {
             position_ms: (pos_sec * 1000.0) as u64,
@@ -378,6 +408,7 @@ impl AudioBackend for MpvAudioEngine {
             is_playing: self.has_active_track && !paused && !eof,
             is_buffering: buffering,
             eof_reached: eof,
+            playback_failed,
         }
     }
 }

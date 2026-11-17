@@ -25,10 +25,52 @@ export interface PlaybackSession {
   volume: number;
 }
 
+export interface LyricWord {
+  start_time_ms: number;
+  end_time_ms: number;
+  text: string;
+}
+
 export interface LyricLine {
   start_time_ms: number;
   end_time_ms: number;
   text: string;
+  words?: LyricWord[];
+}
+
+export interface PersistedSettings {
+  audio_quality: string;
+  normalize_volume: boolean;
+  crossfade_sec: number;
+  lru_cache_path: string;
+  lru_limit_gb: number;
+  offline_downloads_path: string;
+  discord_rpc_enabled: boolean;
+  prefer_ytdlp: boolean;
+  close_to_tray: boolean;
+}
+
+export interface StorageStats {
+  cache_used_bytes: number;
+  cache_limit_bytes: number;
+  cache_file_count: number;
+  cache_path: string;
+  downloads_path: string;
+  offline_track_count: number;
+  offline_total_bytes: number;
+}
+
+export interface EngineDiagnostics {
+  mpv_active: boolean;
+  ytdlp_available: boolean;
+  ytdlp_version: string;
+  prefer_ytdlp: boolean;
+  memory_cache_entries: number;
+}
+
+export interface YtmAccountStatus {
+  connected: boolean;
+  pending_sync_count: number;
 }
 
 export interface LyricsPayload {

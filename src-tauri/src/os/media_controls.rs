@@ -26,15 +26,27 @@ pub fn map_media_control_event(event: &MediaControlEvent) -> Option<AudioCommand
 }
 
 /// Non-fatal bridge to Windows SMTC / OS media controls via `souvlaki`.
+#[derive(Default)]
 pub struct MediaControlsBridge {
     controls: Option<MediaControls>,
 }
 
 impl MediaControlsBridge {
+    /// Returns an inert bridge with no OS media controls attached.
+    pub fn disabled() -> Self {
+        Self { controls: None }
+    }
+
     /// Attempts to initialize `souvlaki::MediaControls` (passing HWND on Windows).
     /// Failures are non-fatal so headless tests or environments without an active
     /// media session still start cleanly.
     pub fn new_optional(hwnd: Option<*mut c_void>, tx: mpsc::Sender<AudioCommand>) -> Self {
+        // `souvlaki` panics on Windows if `hwnd` is `None` instead of returning an `Err`.
+        #[cfg(target_os = "windows")]
+        if hwnd.is_none() {
+            return Self::disabled();
+        }
+
         let config = PlatformConfig {
             dbus_name: "nocturne",
             display_name: "Nocturne",
@@ -114,5 +126,14 @@ mod tests {
             map_media_control_event(&MediaControlEvent::Toggle),
             Some(AudioCommand::TogglePlayback)
         ));
+    }
+
+    #[test]
+    fn new_optional_without_hwnd_does_not_panic() {
+        let (tx, _rx) = mpsc::channel(1);
+        let bridge = MediaControlsBridge::new_optional(None, tx);
+        #[cfg(target_os = "windows")]
+        assert!(bridge.controls.is_none());
+        let _ = bridge;
     }
 }

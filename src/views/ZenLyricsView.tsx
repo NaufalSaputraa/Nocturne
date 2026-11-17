@@ -16,9 +16,9 @@ import {
 } from 'lucide-react';
 import {
   formatTimeSec,
-  type DemoLyricLine,
   type DemoTrack,
 } from '../data/mockLibrary';
+import type { LyricLine } from '../types/nocturne';
 import { runWindowAction } from '../lib/windowControls';
 import { InteractiveLyricLine } from '../components/lyrics/InteractiveLyricLine';
 
@@ -30,11 +30,12 @@ export interface ZenLyricsViewProps {
   shuffle: boolean;
   repeatMode: 'off' | 'all' | 'one';
   upNext: DemoTrack[];
-  lyrics: DemoLyricLine[];
-  lyricSource: 'LRCLIB' | 'YouTube Music';
+  lyrics: LyricLine[];
+  lyricSource: 'LRCLIB' | 'YouTube Music' | 'None';
   lyricOffsetMs: number;
   onBack: () => void;
   onOpenFullQueue?: () => void;
+  onInspectTrack?: (track: DemoTrack) => void;
   onTogglePlay: () => void;
   onPrev: () => void;
   onNext: () => void;
@@ -62,6 +63,7 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
   lyricOffsetMs,
   onBack,
   onOpenFullQueue,
+  onInspectTrack,
   onTogglePlay,
   onPrev,
   onNext,
@@ -398,9 +400,20 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
         <section className="w-[55%] h-full p-10 flex flex-col justify-between bg-[#121212] relative overflow-hidden">
           <div className="flex items-start justify-between z-10">
             <div>
-              <h1 className="text-3xl font-semibold text-[#FAFAFA]">
-                {currentTrack.title}
-              </h1>
+              {onInspectTrack ? (
+                <button
+                  type="button"
+                  onClick={() => onInspectTrack(currentTrack)}
+                  title="View track details"
+                  className="text-left text-3xl font-semibold text-[#FAFAFA] hover:text-[#F43F5E] transition-colors"
+                >
+                  {currentTrack.title}
+                </button>
+              ) : (
+                <h1 className="text-3xl font-semibold text-[#FAFAFA]">
+                  {currentTrack.title}
+                </h1>
+              )}
               <p className="text-sm font-medium text-[#A1A1AA] mt-1 flex items-center gap-2">
                 <span>{currentTrack.artist}</span>
                 <span className="text-[#3F3F46]">•</span>
@@ -444,6 +457,7 @@ export const ZenLyricsView: React.FC<ZenLyricsViewProps> = ({
                       currentTimeMs={effectiveTimeMs}
                       isActive={isActive}
                       isPast={isPast}
+                      words={line.words}
                       fontSizeClass={largeText ? 'text-[32px]' : 'text-[28px]'}
                       onClickLine={(t) => onSeekMs(Math.max(0, t - lyricOffsetMs))}
                     />

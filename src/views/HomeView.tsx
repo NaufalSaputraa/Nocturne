@@ -5,6 +5,7 @@ import {
   Clock,
   Download,
   Heart,
+  Info,
   Play,
 } from 'lucide-react';
 import {
@@ -14,6 +15,7 @@ import {
   type DemoPlaylist,
   type DemoTrack,
 } from '../data/mockLibrary';
+import { ArtworkImage } from '../components/ui/ArtworkImage';
 
 export type HomeFilter = 'All' | 'Songs' | 'Albums' | 'Playlists' | 'Offline';
 
@@ -25,6 +27,8 @@ export interface HomeViewProps {
   activeTrackId: string;
   isPlaying?: boolean;
   bannerSaved: boolean;
+  bannerTitle?: string;
+  bannerCoverUrl?: string;
   initialFilter?: HomeFilter;
   onPlayTrack: (track: DemoTrack) => void;
   onPlayAll: (tracks: DemoTrack[]) => void;
@@ -32,6 +36,7 @@ export interface HomeViewProps {
   onToggleLike: (videoId: string) => void;
   onToggleOffline: (videoId: string) => void;
   onSelectPlaylist: (id: string) => void;
+  onInspectTrack?: (track: DemoTrack) => void;
 }
 
 const FILTER_PILLS: HomeFilter[] = ['All', 'Songs', 'Albums', 'Playlists', 'Offline'];
@@ -44,6 +49,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
   activeTrackId,
   isPlaying = true,
   bannerSaved,
+  bannerTitle = 'Chill Coding & Lo-Fi Beats',
+  bannerCoverUrl,
   initialFilter = 'All',
   onPlayTrack,
   onPlayAll,
@@ -51,6 +58,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onToggleLike,
   onToggleOffline,
   onSelectPlaylist,
+  onInspectTrack,
 }) => {
   const [filter, setFilter] = useState<HomeFilter>(initialFilter);
 
@@ -103,9 +111,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
       {(filter === 'All' || filter === 'Playlists') && !sectionTitle && (
         <section className="bg-[#18181B] border border-[#27272A] rounded-2xl p-6 flex flex-col sm:flex-row gap-6 items-center">
           <div className="relative w-40 h-40 shrink-0 rounded-xl overflow-hidden bg-[#121212] border border-[#27272A]">
-            <img
-              src={FEATURED_BANNER_COVER}
-              alt="Chill Coding & Lo-Fi Beats"
+            <ArtworkImage
+              src={bannerCoverUrl || FEATURED_BANNER_COVER}
+              alt={bannerTitle}
+              kind="playlist"
               className="w-full h-full aspect-square object-cover"
             />
           </div>
@@ -114,7 +123,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               Curated playlist
             </span>
             <h1 className="text-2xl font-semibold text-[#FAFAFA] mb-2">
-              Chill Coding &amp; Lo-Fi Beats
+              {bannerTitle}
             </h1>
             <p className="text-sm text-[#A1A1AA] mb-5">
               Curated for deep focus • {tracks.length} songs • Direct high-bitrate stream
@@ -163,9 +172,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
               className="bg-[#18181B] border border-[#27272A] rounded-xl p-3.5 hover:bg-[#222226] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 transition-colors cursor-pointer group"
             >
               <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-[#27272A] mb-3">
-                <img
+                <ArtworkImage
                   src={album.cover_url}
                   alt={album.title}
+                  kind="album"
                   className="w-full h-full aspect-square object-cover"
                 />
               </div>
@@ -190,9 +200,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
               onClick={() => onSelectPlaylist(pl.id)}
               className="bg-[#18181B] border border-[#27272A] rounded-xl p-4 hover:bg-[#222226] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 transition-colors text-left flex items-center gap-4"
             >
-              <img
+              <ArtworkImage
                 src={pl.cover_url}
                 alt={pl.name}
+                kind="playlist"
                 className="w-16 h-16 rounded-lg aspect-square object-cover shrink-0"
               />
               <div className="min-w-0">
@@ -291,11 +302,23 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       </div>
 
                       <div className="col-span-5 flex items-center gap-3 min-w-0">
-                        <img
-                          src={track.thumbnail_url}
-                          alt={track.title}
-                          className="w-9 h-9 rounded-md aspect-square object-cover shrink-0"
-                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            if (onInspectTrack) {
+                              e.stopPropagation();
+                              onInspectTrack(track);
+                            }
+                          }}
+                          title={onInspectTrack ? 'View track details' : undefined}
+                          className="shrink-0 rounded-md overflow-hidden hover:ring-2 hover:ring-[#F43F5E]/70 transition-all"
+                        >
+                          <ArtworkImage
+                            src={track.thumbnail_url}
+                            alt={track.title}
+                            className="w-9 h-9 rounded-md aspect-square object-cover"
+                          />
+                        </button>
                         <div className="flex flex-col min-w-0">
                           <span
                             className={`text-sm font-medium truncate ${
@@ -339,7 +362,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         </button>
                       </div>
 
-                      <div className="col-span-1 flex items-center justify-center">
+                      <div className="col-span-1 flex items-center justify-center gap-1">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -357,6 +380,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
                             className={`w-4 h-4 ${track.liked ? 'fill-[#F43F5E]' : ''}`}
                           />
                         </button>
+                        {onInspectTrack && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onInspectTrack(track);
+                            }}
+                            aria-label={`Details for ${track.title}`}
+                            title="Track details"
+                            className="p-1 rounded text-[#8E8E98] hover:text-white opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 transition-colors"
+                          >
+                            <Info className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
 
                       <div

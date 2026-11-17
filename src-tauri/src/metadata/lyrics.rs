@@ -3,7 +3,7 @@ use rustypipe::client::RustyPipe;
 use serde::Deserialize;
 use sqlx::{Row, SqlitePool};
 
-use crate::models::{AppError, LyricLine, LyricsPayload};
+use crate::models::{AppError, LyricLine, LyricWord, LyricsPayload};
 
 /// Abstraction over synced LRC lyrics provider (LRCLIB).
 #[async_trait]
@@ -148,6 +148,7 @@ impl YtmLyricsProvider for RustypipeYtmLyricsProvider {
                     start_time_ms: start,
                     end_time_ms: end,
                     text,
+                    words: None,
                 }
             })
             .collect();
@@ -173,6 +174,63 @@ fn parse_lrc_timestamp(tag: &str) -> Option<u64> {
         (sec_part.parse::<u64>().ok()?, 0)
     };
     Some(mins * 60_000 + secs * 1_000 + frac_ms)
+}
+
+/// Parses Enhanced LRC inline `<mm:ss.xx>` word timestamps if present, returning
+/// `(clean_text, Some(words))` or `(raw_text, None)`.
+fn parse_enhanced_words(raw: &str, line_start_ms: u64, line_end_ms: u64) -> (String, Option<Vec<LyricWord>>) {
+    if !raw.contains('<') {
+        return (raw.to_string(), None);
+    }
+
+    let mut clean = String::with_capacity(raw.len());
+    let mut segments: Vec<(u64, String)> = Vec::new();
+    let mut current_ts = line_start_ms;
+    let mut rest = raw;
+
+    while let Some(open) = rest.find('<') {
+        let before = &rest[..open];
+        if !before.is_empty() {
+            clean.push_str(before);
+            segments.push((current_ts, before.to_string()));
+        }
+        let after_open = &rest[open + 1..];
+        if let Some(close) = after_open.find('>') {
+            let tag = &after_open[..close];
+            if let Some(ts) = parse_lrc_timestamp(tag) {
+                current_ts = ts;
+                rest = &after_open[close + 1..];
+                continue;
+            }
+        }
+        clean.push('<');
+        rest = after_open;
+    }
+    if !rest.is_empty() {
+        clean.push_str(rest);
+        segments.push((current_ts, rest.to_string()));
+    }
+
+    let trimmed_clean = clean.trim().to_string();
+    if segments.is_empty() {
+        return (trimmed_clean, None);
+    }
+
+    let mut words = Vec::with_capacity(segments.len());
+    for i in 0..segments.len() {
+        let (start, txt) = &segments[i];
+        let end = if i + 1 < segments.len() {
+            segments[i + 1].0.max(*start + 1)
+        } else {
+            line_end_ms.max(*start + 1)
+        };
+        words.push(LyricWord {
+            start_time_ms: *start,
+            end_time_ms: end,
+            text: txt.clone(),
+        });
+    }
+    (trimmed_clean, Some(words))
 }
 
 /// Parses an LRC string into `LyricLine` entries, computing `end_time_ms` from the
@@ -206,16 +264,18 @@ pub fn parse_lrc(lrc: &str, duration_sec: u64) -> Vec<LyricLine> {
     let total_ms = duration_sec.saturating_mul(1000);
     let mut out = Vec::with_capacity(parsed.len());
     for i in 0..parsed.len() {
-        let (start_time_ms, text) = parsed[i].clone();
+        let (start_time_ms, raw_text) = parsed[i].clone();
         let end_time_ms = if i + 1 < parsed.len() {
             parsed[i + 1].0.max(start_time_ms)
         } else {
             total_ms.max(start_time_ms)
         };
+        let (text, words) = parse_enhanced_words(&raw_text, start_time_ms, end_time_ms);
         out.push(LyricLine {
             start_time_ms,
             end_time_ms,
             text,
+            words,
         });
     }
     out
@@ -327,6 +387,7 @@ mod tests {
                 start_time_ms: 0,
                 end_time_ms: 5_000,
                 text: "Fallback YTM lyric line".to_string(),
+                words: None,
             }]))
         }
     }

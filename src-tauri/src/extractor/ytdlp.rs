@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use tokio::process::Command;
 
 use crate::extractor::cache::STREAM_TTL_SECS;
-use crate::extractor::stream::FallbackStreamProvider;
+use crate::extractor::stream::{normalize_quality_key, FallbackStreamProvider};
 use crate::models::{AppError, StreamInfo, StreamSource};
 
 /// Sidecar wrapper around `yt-dlp` used strictly as a fallback stream resolver
@@ -38,11 +38,43 @@ impl YtdlpSidecar {
     }
 
     fn format_selector(quality: &str) -> &'static str {
-        match quality {
-            "opus_160" | "high" | "auto" => "bestaudio[acodec=opus]/bestaudio[ext=webm]/bestaudio",
-            "aac_128" | "medium" => "bestaudio[ext=m4a]/bestaudio",
-            _ => "bestaudio[ext=webm]/bestaudio",
+        match normalize_quality_key(quality) {
+            "auto" | "opus_160" => {
+                "bestaudio[acodec=opus]/bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best"
+            }
+            "aac_256" | "aac_128" => {
+                "bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]/bestaudio[acodec=opus]/bestaudio/best"
+            }
+            "opus_128" => {
+                "bestaudio[acodec=opus][abr<=135]/bestaudio[abr<=140]/bestaudio[ext=webm]/bestaudio/best"
+            }
+            _ => "bestaudio[ext=webm]/bestaudio/best",
         }
+    }
+
+    /// Queries the installed/bundled `yt-dlp --version` string.
+    pub async fn get_version(&self) -> Result<String, AppError> {
+        let mut cmd = Command::new(&self.binary_path);
+        cmd.arg("--version")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        let output = cmd.output().await.map_err(|e| {
+            AppError::Extraction(format!(
+                "yt-dlp unavailable ({}): {e}",
+                self.binary_path.display()
+            ))
+        })?;
+        if !output.status.success() {
+            return Err(AppError::Extraction(
+                String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            ));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
 
     /// Runs `yt-dlp -U` to update the sidecar binary in-place and returns the output summary.

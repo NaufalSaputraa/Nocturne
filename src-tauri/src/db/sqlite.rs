@@ -89,6 +89,13 @@ const SCHEMA_STATEMENTS: &[&str] = &[
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     "#,
+    r#"
+    CREATE TABLE IF NOT EXISTS app_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        settings_json TEXT NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    "#,
 ];
 
 /// Initializes the local SQLite database at `db_path` with WAL mode, foreign keys,

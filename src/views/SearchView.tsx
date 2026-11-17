@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ArrowLeft, BadgeCheck, Heart, Play, SearchX } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Heart, Info, Loader2, Play, SearchX } from 'lucide-react';
+import type { SearchResult, TrackMetadata } from '../types/nocturne';
 import {
   formatTimeSec,
   type DemoAlbum,
@@ -7,6 +8,7 @@ import {
   type DemoPlaylist,
   type DemoTrack,
 } from '../data/mockLibrary';
+import { ArtworkImage } from '../components/ui/ArtworkImage';
 
 export type SearchFilter = 'All' | 'Songs' | 'Albums' | 'Artists' | 'Playlists';
 
@@ -16,11 +18,33 @@ export interface SearchViewProps {
   albums: DemoAlbum[];
   artists: DemoArtist[];
   playlists: DemoPlaylist[];
+  remoteResult?: SearchResult | null;
+  isSearching?: boolean;
+  searchError?: string | null;
+  likedIds?: Set<string>;
+  offlineIds?: Set<string>;
   onPlayTrack: (track: DemoTrack) => void;
   onPlayAll: (tracks: DemoTrack[]) => void;
   onToggleLike: (videoId: string) => void;
   onSelectPlaylist: (id: string) => void;
   onClearSearch: () => void;
+  onInspectTrack?: (track: DemoTrack) => void;
+}
+
+function toDemoTrackFromSearch(
+  t: TrackMetadata,
+  likedIds?: Set<string>,
+  offlineIds?: Set<string>,
+): DemoTrack {
+  return {
+    ...t,
+    album: t.album ?? 'Single',
+    year: new Date().getFullYear(),
+    date_added: 'YouTube Music',
+    accentColor: '#F43F5E',
+    liked: likedIds?.has(t.video_id) ?? false,
+    offline: offlineIds?.has(t.video_id) ?? false,
+  };
 }
 
 const SEARCH_FILTERS: SearchFilter[] = ['All', 'Songs', 'Albums', 'Artists', 'Playlists'];
@@ -31,18 +55,29 @@ export const SearchView: React.FC<SearchViewProps> = ({
   albums,
   artists,
   playlists,
+  remoteResult = null,
+  isSearching = false,
+  searchError = null,
+  likedIds,
+  offlineIds,
   onPlayTrack,
   onPlayAll,
   onToggleLike,
   onSelectPlaylist,
   onClearSearch,
+  onInspectTrack,
 }) => {
   const [filter, setFilter] = useState<SearchFilter>('All');
   const [selectedArtist, setSelectedArtist] = useState<DemoArtist | null>(null);
 
   const normalized = query.trim().toLowerCase();
-  const matchingTracks =
-    normalized.length > 0
+  const useRemote = Boolean(remoteResult) && normalized.length > 0;
+
+  const matchingTracks: DemoTrack[] = useRemote
+    ? (remoteResult?.songs ?? []).map((t) =>
+        toDemoTrackFromSearch(t, likedIds, offlineIds),
+      )
+    : normalized.length > 0
       ? tracks.filter(
           (t) =>
             t.title.toLowerCase().includes(normalized) ||
@@ -51,8 +86,16 @@ export const SearchView: React.FC<SearchViewProps> = ({
         )
       : tracks.filter((t) => t.artist === 'Perunggu');
 
-  const matchingAlbums =
-    normalized.length > 0
+  const matchingAlbums: DemoAlbum[] = useRemote
+    ? (remoteResult?.albums ?? []).map((a) => ({
+        id: a.id,
+        title: a.title,
+        artist: a.artist,
+        year: a.year ?? new Date().getFullYear(),
+        kind: 'Album' as const,
+        cover_url: a.thumbnail_url,
+      }))
+    : normalized.length > 0
       ? albums.filter(
           (a) =>
             a.title.toLowerCase().includes(normalized) ||
@@ -60,8 +103,15 @@ export const SearchView: React.FC<SearchViewProps> = ({
         )
       : albums;
 
-  const matchingArtists =
-    normalized.length > 0
+  const matchingArtists: DemoArtist[] = useRemote
+    ? (remoteResult?.artists ?? []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        listeners: a.subscribers ?? 'YouTube Music Artist',
+        verified: true,
+        avatar_url: a.thumbnail_url,
+      }))
+    : normalized.length > 0
       ? artists.filter((a) => a.name.toLowerCase().includes(normalized))
       : artists;
 
@@ -106,9 +156,10 @@ export const SearchView: React.FC<SearchViewProps> = ({
         </button>
 
         <div className="flex items-center gap-5 bg-[#18181B] border border-[#27272A] rounded-2xl p-6">
-          <img
+          <ArtworkImage
             src={selectedArtist.avatar_url}
             alt={selectedArtist.name}
+            kind="artist"
             className="w-24 h-24 rounded-full aspect-square object-cover border border-[#27272A]"
           />
           <div>
@@ -145,7 +196,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                 className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[#222226] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 transition-colors cursor-pointer group"
               >
                 <div className="flex items-center gap-3.5 min-w-0">
-                  <img
+                  <ArtworkImage
                     src={track.thumbnail_url}
                     alt={track.title}
                     className="w-10 h-10 rounded-md aspect-square object-cover shrink-0"
@@ -173,10 +224,22 @@ export const SearchView: React.FC<SearchViewProps> = ({
   return (
     <div className="flex flex-col w-full gap-7">
       {normalized.length > 0 && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <h1 className="text-lg font-semibold text-[#FAFAFA]">
             Results for &ldquo;{query.trim()}&rdquo;
           </h1>
+          {isSearching && (
+            <span className="inline-flex items-center gap-2 text-xs text-[#A1A1AA]">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-[#F43F5E]" />
+              <span>Searching YouTube Music…</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {searchError && (
+        <div className="rounded-xl bg-[#F43F5E]/10 border border-[#F43F5E]/30 px-4 py-2.5 text-xs text-[#FAFAFA]">
+          {searchError}
         </div>
       )}
 
@@ -242,9 +305,10 @@ export const SearchView: React.FC<SearchViewProps> = ({
                   >
                     <div className="flex flex-col items-start">
                       <div className="w-24 h-24 rounded-full overflow-hidden bg-[#27272A] shrink-0">
-                        <img
+                        <ArtworkImage
                           src={topArtist.avatar_url}
                           alt={topArtist.name}
+                          kind="artist"
                           className="w-full h-full aspect-square object-cover"
                         />
                       </div>
@@ -317,16 +381,23 @@ export const SearchView: React.FC<SearchViewProps> = ({
                         className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[#222226] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 transition-colors group cursor-pointer"
                       >
                         <div className="flex items-center gap-3.5 min-w-0 pr-4">
-                          <div className="relative w-10 h-10 rounded-md overflow-hidden bg-[#27272A] shrink-0">
-                            <img
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              if (onInspectTrack) {
+                                e.stopPropagation();
+                                onInspectTrack(track);
+                              }
+                            }}
+                            title={onInspectTrack ? 'View track details' : undefined}
+                            className="relative w-10 h-10 rounded-md overflow-hidden bg-[#27272A] shrink-0 hover:ring-2 hover:ring-[#F43F5E]/70 transition-all"
+                          >
+                            <ArtworkImage
                               src={track.thumbnail_url}
                               alt={track.title}
                               className="w-full h-full aspect-square object-cover"
                             />
-                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <Play className="w-4 h-4 text-white fill-current" />
-                            </div>
-                          </div>
+                          </button>
                           <div className="flex flex-col min-w-0">
                             <span className="text-sm font-medium text-[#FAFAFA] truncate group-hover:text-white">
                               {track.title}
@@ -336,7 +407,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                             </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-4 shrink-0">
+                        <div className="flex items-center gap-3 shrink-0">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -354,6 +425,20 @@ export const SearchView: React.FC<SearchViewProps> = ({
                               className={`w-4 h-4 ${track.liked ? 'fill-[#F43F5E]' : ''}`}
                             />
                           </button>
+                          {onInspectTrack && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onInspectTrack(track);
+                              }}
+                              aria-label={`Details for ${track.title}`}
+                              title="Track details"
+                              className="p-1 text-[#8E8E98] hover:text-white opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 transition-colors"
+                            >
+                              <Info className="w-4 h-4" />
+                            </button>
+                          )}
                           <span className="text-xs font-mono text-[#8E8E98] tabular-nums w-11 text-right">
                             {formatTimeSec(track.duration_sec)}
                           </span>

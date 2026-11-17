@@ -5,6 +5,7 @@ import {
   Clock,
   Download,
   Heart,
+  Info,
   LayoutGrid,
   List,
   MoreHorizontal,
@@ -23,6 +24,7 @@ import {
   type DemoPlaylist,
   type DemoTrack,
 } from '../data/mockLibrary';
+import { ArtworkImage } from '../components/ui/ArtworkImage';
 
 type SortKey = 'custom' | 'title' | 'duration';
 
@@ -44,6 +46,7 @@ export interface PlaylistDetailViewProps {
   onDownloadAll: (tracks: DemoTrack[]) => void;
   onRenamePlaylist: (id: string, newName: string) => void;
   onDeletePlaylist: (id: string) => void;
+  onInspectTrack?: (track: DemoTrack) => void;
 }
 
 export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
@@ -58,6 +61,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
   onDownloadAll,
   onRenamePlaylist,
   onDeletePlaylist,
+  onInspectTrack,
 }) => {
   const [filterText, setFilterText] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('custom');
@@ -389,7 +393,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
               }}
               className="bg-[#18181B] border border-[#27272A] rounded-xl p-3 hover:bg-[#222226] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 cursor-pointer"
             >
-              <img
+              <ArtworkImage
                 src={track.thumbnail_url}
                 alt={track.title}
                 className="w-full aspect-square object-cover rounded-lg mb-2.5"
@@ -449,11 +453,23 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
                   </div>
 
                   <div className="flex-1 flex items-center gap-3 px-3 min-w-0">
-                    <img
-                      src={track.thumbnail_url}
-                      alt={track.title}
-                      className="w-9 h-9 rounded-md aspect-square object-cover shrink-0"
-                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        if (onInspectTrack) {
+                          e.stopPropagation();
+                          onInspectTrack(track);
+                        }
+                      }}
+                      title={onInspectTrack ? 'View track details' : undefined}
+                      className="shrink-0 rounded-md overflow-hidden hover:ring-2 hover:ring-[#F43F5E]/70 transition-all"
+                    >
+                      <ArtworkImage
+                        src={track.thumbnail_url}
+                        alt={track.title}
+                        className="w-9 h-9 rounded-md aspect-square object-cover"
+                      />
+                    </button>
                     <div className="flex flex-col min-w-0">
                       <span
                         className={`text-sm font-medium truncate ${
@@ -476,7 +492,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
                     {track.date_added}
                   </div>
 
-                  <div className="w-10 flex items-center justify-center shrink-0">
+                  <div className="w-16 flex items-center justify-center gap-1 shrink-0">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -494,6 +510,20 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({
                         className={`w-4 h-4 ${track.liked ? 'fill-[#F43F5E]' : ''}`}
                       />
                     </button>
+                    {onInspectTrack && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onInspectTrack(track);
+                        }}
+                        aria-label={`Details for ${track.title}`}
+                        title="Track details"
+                        className="p-1 rounded text-[#8E8E98] hover:text-white opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 transition-colors"
+                      >
+                        <Info className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
 
                   <div

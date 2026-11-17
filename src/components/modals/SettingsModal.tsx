@@ -14,6 +14,12 @@ import {
   InteractiveDropdown,
   type DropdownOption,
 } from '../ui/InteractiveDropdown';
+import { isTauriRuntime, tauriApi } from '../../lib/tauri';
+import type {
+  EngineDiagnostics,
+  StorageStats,
+  YtmAccountStatus,
+} from '../../types/nocturne';
 
 export type SettingsTab = 'audio' | 'storage' | 'engine' | 'account';
 
@@ -25,6 +31,8 @@ export interface NocturneSettings {
   lruLimitGb: number;
   offlineDownloadsPath: string;
   discordRpcEnabled: boolean;
+  preferYtdlp: boolean;
+  closeToTray: boolean;
   ytmConnected: boolean;
 }
 
@@ -34,23 +42,30 @@ export interface SettingsModalProps {
   settings: NocturneSettings;
   onClose: () => void;
   onSave: (next: NocturneSettings) => void;
+  onYtmStatusChanged?: (connected: boolean) => void;
 }
 
 const QUALITY_OPTIONS: DropdownOption[] = [
   {
-    value: 'Opus 160kbps',
+    value: 'auto',
+    label: 'Auto • Best Available (with fallback)',
+    badge: 'Smart',
+    description: 'Prioritizes highest Opus/M4A stream and steps down automatically on failure.',
+  },
+  {
+    value: 'opus_160',
     label: 'High • Opus 160 kbps',
     badge: '48kHz VBR',
     description: 'Recommended balance of clarity and instant stream start.',
   },
   {
-    value: 'M4A 256kbps',
+    value: 'aac_256',
     label: 'AAC High • M4A 256 kbps',
     badge: 'AAC-LC',
     description: 'Maximum compatibility for offline downloads.',
   },
   {
-    value: 'Opus 128kbps',
+    value: 'opus_128',
     label: 'Data Saver • Opus 128 kbps',
     badge: 'Low BW',
     description: 'Faster buffering on slower connections.',
@@ -63,13 +78,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onClose,
   onSave,
+  onYtmStatusChanged,
 }) => {
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [draft, setDraft] = useState<NocturneSettings>(settings);
-  const [cacheUsedGb, setCacheUsedGb] = useState(1.4);
+  const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
+  const [cacheUsedGb, setCacheUsedGb] = useState(0);
   const [cacheNotice, setCacheNotice] = useState<string | null>(null);
-  const [ytdlpStatus, setYtdlpStatus] = useState('Up to date • v2026.11.12');
+  const [ytdlpStatus, setYtdlpStatus] = useState('Checking yt-dlp...');
+  const [isUpdatingYtdlp, setIsUpdatingYtdlp] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<EngineDiagnostics | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [ytmStatus, setYtmStatus] = useState<YtmAccountStatus | null>(null);
+  const [ytmCookieInput, setYtmCookieInput] = useState('');
+  const [ytmBusy, setYtmBusy] = useState(false);
+  const [ytmNotice, setYtmNotice] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -86,9 +109,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   useEffect(() => {
     setDraft(settings);
     setCacheNotice(null);
+    setYtmNotice(null);
     setConfirmDiscard(false);
     if (open) setTab(initialTab);
   }, [settings, open, initialTab]);
+
+  useEffect(() => {
+    if (!open || !isTauriRuntime()) return;
+    let cancelled = false;
+    void (async () => {
+      const [stats, diag, ytm] = await Promise.all([
+        tauriApi.getStorageStats().catch(() => null),
+        tauriApi.getEngineDiagnostics().catch(() => null),
+        tauriApi.getYtmAccountStatus().catch(() => null),
+      ]);
+      if (cancelled) return;
+      if (stats) {
+        setStorageStats(stats);
+        setCacheUsedGb(stats.cache_used_bytes / (1024 * 1024 * 1024));
+      }
+      if (diag) {
+        setDiagnostics(diag);
+        setYtdlpStatus(
+          diag.ytdlp_available
+            ? `Ready • v${diag.ytdlp_version}`
+            : 'yt-dlp binary not found',
+        );
+      }
+      if (ytm) {
+        setYtmStatus(ytm);
+        setDraft((prev) => ({ ...prev, ytmConnected: ytm.connected }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -303,9 +359,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </span>
                     <button
                       type="button"
-                      onClick={() => {
-                        setCacheUsedGb(0);
-                        setCacheNotice('Playback cache cleared.');
+                      onClick={async () => {
+                        if (isTauriRuntime()) {
+                          const freed = await tauriApi.clearLruCache().catch(() => null);
+                          const stats = await tauriApi.getStorageStats().catch(() => null);
+                          if (stats) {
+                            setStorageStats(stats);
+                            setCacheUsedGb(stats.cache_used_bytes / (1024 * 1024 * 1024));
+                          } else {
+                            setCacheUsedGb(0);
+                          }
+                          const freedMb = freed ? (freed / (1024 * 1024)).toFixed(1) : '0.0';
+                          setCacheNotice(`Cleared ${freedMb} MB from stream cache.`);
+                        } else {
+                          setCacheUsedGb(0);
+                          setCacheNotice('Playback cache cleared.');
+                        }
                       }}
                       className="text-xs text-[#F43F5E] hover:underline whitespace-nowrap"
                     >
@@ -341,7 +410,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   />
                   <div className="flex items-center justify-between text-[11px] text-[#8E8E98] font-mono tabular-nums">
                     <span>
-                      {cacheUsedGb.toFixed(1)} GB used of {draft.lruLimitGb.toFixed(1)} GB limit
+                      {cacheUsedGb.toFixed(2)} GB used of {draft.lruLimitGb.toFixed(1)} GB limit
+                      {storageStats ? ` (${storageStats.cache_file_count} files)` : ''}
                     </span>
                     <span>{usagePct}%</span>
                   </div>
@@ -383,9 +453,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <p className="text-sm font-medium text-[#FAFAFA]">
                       Instant Native Stream Engine
                     </p>
-                    <p className="text-xs text-emerald-400 flex items-center gap-1 mt-0.5">
+                    <p
+                      className={`text-xs flex items-center gap-1 mt-0.5 ${
+                        diagnostics === null || diagnostics.mpv_active
+                          ? 'text-emerald-400'
+                          : 'text-amber-400'
+                      }`}
+                    >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Active • Ready for low-latency playback</span>
+                      <span>
+                        {diagnostics === null
+                          ? 'Active • Ready for low-latency playback'
+                          : diagnostics.mpv_active
+                            ? 'libmpv-2 active • Hardware-ready audio pipeline'
+                            : 'Fallback mode • libmpv-2.dll not loaded'}
+                      </span>
                     </p>
                   </div>
                 </div>
@@ -395,15 +477,76 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <p className="text-sm font-medium text-[#FAFAFA]">
                       Backup Extractor (yt-dlp)
                     </p>
-                    <p className="text-xs text-emerald-400 mt-0.5">{ytdlpStatus}</p>
+                    <p
+                      className={`text-xs mt-0.5 ${
+                        diagnostics?.ytdlp_available === false
+                          ? 'text-amber-400'
+                          : 'text-emerald-400'
+                      }`}
+                    >
+                      {ytdlpStatus}
+                    </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => setYtdlpStatus('Checked • Latest v2026.11.12')}
-                    className="px-3 py-1.5 rounded-lg bg-[#222226] hover:bg-[#27272A] text-xs font-medium text-[#FAFAFA] inline-flex items-center gap-1.5 whitespace-nowrap"
+                    disabled={isUpdatingYtdlp}
+                    onClick={async () => {
+                      if (!isTauriRuntime()) {
+                        setYtdlpStatus('Checked • Latest v2026.11.12');
+                        return;
+                      }
+                      setIsUpdatingYtdlp(true);
+                      setYtdlpStatus('Updating yt-dlp...');
+                      try {
+                        const msg = await tauriApi.updateYtdlpBinary();
+                        const diag = await tauriApi.getEngineDiagnostics().catch(() => null);
+                        if (diag) setDiagnostics(diag);
+                        setYtdlpStatus(
+                          diag?.ytdlp_available
+                            ? `Updated • v${diag.ytdlp_version}`
+                            : msg || 'Update complete',
+                        );
+                      } catch (err) {
+                        setYtdlpStatus(`Update failed: ${String(err)}`);
+                      } finally {
+                        setIsUpdatingYtdlp(false);
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-[#222226] hover:bg-[#27272A] disabled:opacity-50 text-xs font-medium text-[#FAFAFA] inline-flex items-center gap-1.5 whitespace-nowrap"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Check for Updates</span>
+                    <RefreshCw
+                      className={`w-3.5 h-3.5 ${isUpdatingYtdlp ? 'animate-spin' : ''}`}
+                    />
+                    <span>{isUpdatingYtdlp ? 'Updating...' : 'Check for Updates'}</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#121212] border border-[#27272A]">
+                  <div className="pr-4">
+                    <p className="text-sm font-medium text-[#FAFAFA]">
+                      Prefer yt-dlp Over Native Extractor
+                    </p>
+                    <p className="text-xs text-[#8E8E98]">
+                      Use yt-dlp first if YouTube throttles native streams
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-label="Prefer yt-dlp Over Native Extractor"
+                    aria-checked={draft.preferYtdlp}
+                    onClick={() =>
+                      setDraft({ ...draft, preferYtdlp: !draft.preferYtdlp })
+                    }
+                    className={`w-10 h-5 rounded-full p-0.5 transition-colors shrink-0 ${
+                      draft.preferYtdlp ? 'bg-[#F43F5E]' : 'bg-[#27272A]'
+                    }`}
+                  >
+                    <span
+                      className={`block w-4 h-4 rounded-full bg-white transition-transform ${
+                        draft.preferYtdlp ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
                   </button>
                 </div>
 
@@ -456,8 +599,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                   {showDiagnostics && (
                     <div className="px-3.5 pb-3 pt-1 text-[11px] font-mono text-[#8E8E98] space-y-1 border-t border-[#27272A]">
-                      <p>Primary extractor: rustypipe (&lt; 250 ms)</p>
-                      <p>Fallback sidecar: yt-dlp (5.5h stream URL cache)</p>
+                      <p>
+                        Audio backend:{' '}
+                        {diagnostics
+                          ? diagnostics.mpv_active
+                            ? 'libmpv-2 (active)'
+                            : 'NoopAudioBackend (libmpv-2.dll missing)'
+                          : 'libmpv-2'}
+                      </p>
+                      <p>
+                        Primary extractor:{' '}
+                        {diagnostics?.prefer_ytdlp ? 'yt-dlp sidecar' : 'rustypipe (< 250 ms)'}
+                      </p>
+                      <p>
+                        Memory URL cache: {diagnostics?.memory_cache_entries ?? 0} entries (5.5h TTL)
+                      </p>
                       <p>Loudness: static pre-amp via perceptualLoudnessDb</p>
                       <p>Storage: SQLite WAL + 5s debounced session restore</p>
                     </div>
@@ -468,29 +624,151 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {tab === 'account' && (
               <>
-                <div className="p-4 rounded-xl bg-[#121212] border border-[#27272A] flex items-center justify-between gap-4">
-                  <div>
+                <div className="p-4 rounded-xl bg-[#121212] border border-[#27272A] flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-[#FAFAFA]">
+                        YouTube Music Account
+                      </p>
+                      <p className="text-xs text-[#8E8E98] mt-0.5">
+                        {draft.ytmConnected
+                          ? `Connected — Likes & playlists sync with YTM${
+                              ytmStatus && ytmStatus.pending_sync_count > 0
+                                ? ` (${ytmStatus.pending_sync_count} pending)`
+                                : ''
+                            }.`
+                          : 'Local-only mode. Paste your YTM Cookie header to sync Likes & playlists.'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {draft.ytmConnected ? (
+                        <>
+                          {isTauriRuntime() && (
+                            <button
+                              type="button"
+                              disabled={ytmBusy}
+                              onClick={async () => {
+                                setYtmBusy(true);
+                                setYtmNotice(null);
+                                try {
+                                  await tauriApi.reconcileYtmSync();
+                                  const st = await tauriApi.getYtmAccountStatus().catch(() => null);
+                                  if (st) setYtmStatus(st);
+                                  setYtmNotice('YouTube Music library synced.');
+                                } catch (err) {
+                                  setYtmNotice(`Sync failed: ${String(err)}`);
+                                } finally {
+                                  setYtmBusy(false);
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-full bg-[#222226] hover:bg-[#27272A] text-xs font-medium text-[#FAFAFA] whitespace-nowrap"
+                            >
+                              {ytmBusy ? 'Syncing...' : 'Sync Now'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={ytmBusy}
+                            onClick={async () => {
+                              if (isTauriRuntime()) {
+                                setYtmBusy(true);
+                                try {
+                                  await tauriApi.disconnectYtmAccount();
+                                  setYtmNotice('Disconnected. Local library preserved.');
+                                } finally {
+                                  setYtmBusy(false);
+                                }
+                              }
+                              setDraft({ ...draft, ytmConnected: false });
+                              onYtmStatusChanged?.(false);
+                            }}
+                            className="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-[#222226] text-[#FAFAFA] border border-[#3F3F46]"
+                          >
+                            Disconnect
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={ytmBusy || (isTauriRuntime() && ytmCookieInput.trim().length < 8)}
+                          onClick={async () => {
+                            if (isTauriRuntime()) {
+                              setYtmBusy(true);
+                              setYtmNotice(null);
+                              try {
+                                await tauriApi.connectYtmAccount(ytmCookieInput.trim());
+                                const st = await tauriApi.getYtmAccountStatus().catch(() => null);
+                                if (st) setYtmStatus(st);
+                                setYtmCookieInput('');
+                                setYtmNotice('Connected & merged with YouTube Music.');
+                                setDraft({ ...draft, ytmConnected: true });
+                                onYtmStatusChanged?.(true);
+                              } catch (err) {
+                                setYtmNotice(`Connection failed: ${String(err)}`);
+                              } finally {
+                                setYtmBusy(false);
+                              }
+                            } else {
+                              setDraft({ ...draft, ytmConnected: true });
+                              onYtmStatusChanged?.(true);
+                            }
+                          }}
+                          className="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-white text-black disabled:opacity-50"
+                        >
+                          {ytmBusy ? 'Connecting...' : 'Connect Account'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {!draft.ytmConnected && (
+                    <div className="flex flex-col gap-1.5 pt-1 border-t border-[#27272A]/60">
+                      <label className="text-[11px] text-[#A1A1AA]" htmlFor="ytm-cookie-input">
+                        YTM Cookie Header (open music.youtube.com → F12 → Network → copy{' '}
+                        <code className="text-[#FAFAFA]">Cookie</code> header)
+                      </label>
+                      <input
+                        id="ytm-cookie-input"
+                        type="password"
+                        value={ytmCookieInput}
+                        onChange={(e) => setYtmCookieInput(e.target.value)}
+                        placeholder="SAPISID=...; __Secure-3PAPISID=...; ..."
+                        className="bg-[#18181B] border border-[#27272A] rounded-lg px-3 py-1.5 text-xs font-mono text-[#FAFAFA] outline-none focus:border-[#52525B]"
+                      />
+                    </div>
+                  )}
+
+                  {ytmNotice && (
+                    <p className="text-[11px] text-emerald-400">{ytmNotice}</p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#121212] border border-[#27272A]">
+                  <div className="pr-4">
                     <p className="text-sm font-medium text-[#FAFAFA]">
-                      YouTube Music Account
+                      Close to System Tray
                     </p>
-                    <p className="text-xs text-[#8E8E98] mt-0.5">
-                      {draft.ytmConnected
-                        ? 'Connected — Likes and YouTube Music playlists stay in sync.'
-                        : 'Local-only mode. Connect your account to sync Likes & playlists.'}
+                    <p className="text-xs text-[#8E8E98]">
+                      Keep music playing in the background when closing the window
                     </p>
                   </div>
                   <button
                     type="button"
+                    role="switch"
+                    aria-label="Close to System Tray"
+                    aria-checked={draft.closeToTray}
                     onClick={() =>
-                      setDraft({ ...draft, ytmConnected: !draft.ytmConnected })
+                      setDraft({ ...draft, closeToTray: !draft.closeToTray })
                     }
-                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ${
-                      draft.ytmConnected
-                        ? 'bg-[#222226] text-[#FAFAFA] border border-[#3F3F46]'
-                        : 'bg-white text-black'
+                    className={`w-10 h-5 rounded-full p-0.5 transition-colors shrink-0 ${
+                      draft.closeToTray ? 'bg-[#F43F5E]' : 'bg-[#27272A]'
                     }`}
                   >
-                    {draft.ytmConnected ? 'Disconnect' : 'Connect Account'}
+                    <span
+                      className={`block w-4 h-4 rounded-full bg-white transition-transform ${
+                        draft.closeToTray ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
                   </button>
                 </div>
 

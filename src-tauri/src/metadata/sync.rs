@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
 use std::sync::Arc;
 
-use crate::models::{AppError, SyncStatusPayload, TrackMetadata};
+use crate::models::{AppError, SyncStatusPayload, TrackMetadata, YtmAccountStatus};
 
 const YTM_CREDENTIAL_KEY: &str = "ytm_session_credential";
 
@@ -118,6 +118,163 @@ pub trait YtmWriteApi: Send + Sync {
     async fn fetch_playlists(&self, credential: &str) -> Result<Vec<RemoteYtmPlaylist>, AppError>;
 }
 
+/// Minimal RFC 3174 SHA-1 digest for YouTube Music `SAPISIDHASH` authorization headers.
+fn sha1_hex(input: &[u8]) -> String {
+    let mut h: [u32; 5] = [0x6745_2301, 0xEFCD_AB89, 0x98BA_DCFE, 0x1032_5476, 0xC3D2_E1F0];
+    let bit_len = (input.len() as u64) * 8;
+    let mut msg = input.to_vec();
+    msg.push(0x80);
+    while msg.len() % 64 != 56 {
+        msg.push(0);
+    }
+    msg.extend_from_slice(&bit_len.to_be_bytes());
+
+    for chunk in msg.chunks_exact(64) {
+        let mut w = [0u32; 80];
+        for i in 0..16 {
+            w[i] = u32::from_be_bytes([
+                chunk[i * 4],
+                chunk[i * 4 + 1],
+                chunk[i * 4 + 2],
+                chunk[i * 4 + 3],
+            ]);
+        }
+        for i in 16..80 {
+            w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
+        }
+        let [mut a, mut b, mut c, mut d, mut e] = h;
+        for (i, &wi) in w.iter().enumerate() {
+            let (f, k) = match i {
+                0..=19 => ((b & c) | ((!b) & d), 0x5A82_7999),
+                20..=39 => (b ^ c ^ d, 0x6ED9_EBA1),
+                40..=59 => ((b & c) | (b & d) | (c & d), 0x8F1B_BCDC),
+                _ => (b ^ c ^ d, 0xCA62_C1D6),
+            };
+            let temp = a
+                .rotate_left(5)
+                .wrapping_add(f)
+                .wrapping_add(e)
+                .wrapping_add(k)
+                .wrapping_add(wi);
+            e = d;
+            d = c;
+            c = b.rotate_left(30);
+            b = a;
+            a = temp;
+        }
+        h[0] = h[0].wrapping_add(a);
+        h[1] = h[1].wrapping_add(b);
+        h[2] = h[2].wrapping_add(c);
+        h[3] = h[3].wrapping_add(d);
+        h[4] = h[4].wrapping_add(e);
+    }
+    format!(
+        "{:08x}{:08x}{:08x}{:08x}{:08x}",
+        h[0], h[1], h[2], h[3], h[4]
+    )
+}
+
+fn extract_sapisid(cookie: &str) -> Option<String> {
+    for part in cookie.split(';') {
+        let trimmed = part.trim();
+        if let Some((k, v)) = trimmed.split_once('=') {
+            let key = k.trim();
+            if key == "SAPISID" || key == "__Secure-3PAPISID" || key == "__Secure-1PAPISID" {
+                let val = v.trim();
+                if !val.is_empty() {
+                    return Some(val.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn build_sapisidhash(sapisid: &str, ts_secs: i64) -> String {
+    let payload = format!("{ts_secs} {sapisid} https://music.youtube.com");
+    let digest = sha1_hex(payload.as_bytes());
+    format!("SAPISIDHASH {ts_secs}_{digest}")
+}
+
+fn parse_duration_text(text: &str) -> u64 {
+    let parts: Vec<u64> = text
+        .trim()
+        .split(':')
+        .filter_map(|p| p.trim().parse::<u64>().ok())
+        .collect();
+    match parts.as_slice() {
+        [m, s] => m * 60 + s,
+        [h, m, s] => h * 3600 + m * 60 + s,
+        _ => 0,
+    }
+}
+
+fn collect_renderers<'a>(val: &'a serde_json::Value, key: &str, out: &mut Vec<&'a serde_json::Value>) {
+    match val {
+        serde_json::Value::Object(map) => {
+            if let Some(target) = map.get(key) {
+                out.push(target);
+            }
+            for v in map.values() {
+                collect_renderers(v, key, out);
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for v in arr {
+                collect_renderers(v, key, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn parse_responsive_track(item: &serde_json::Value) -> Option<TrackMetadata> {
+    let video_id = item
+        .pointer("/playlistItemData/videoId")
+        .or_else(|| item.pointer("/overlay/musicItemThumbnailOverlayRenderer/content/musicPlayButtonRenderer/playNavigationEndpoint/watchEndpoint/videoId"))
+        .and_then(|v| v.as_str())?
+        .to_string();
+    if video_id.is_empty() {
+        return None;
+    }
+
+    let title = item
+        .pointer("/flexColumns/0/musicResponsiveListItemFlexColumnRenderer/text/runs/0/text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Unknown Title")
+        .to_string();
+
+    let artist = item
+        .pointer("/flexColumns/1/musicResponsiveListItemFlexColumnRenderer/text/runs/0/text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Unknown Artist")
+        .to_string();
+
+    let duration_sec = item
+        .pointer("/fixedColumns/0/musicResponsiveListItemFixedColumnRenderer/text/runs/0/text")
+        .and_then(|v| v.as_str())
+        .map(parse_duration_text)
+        .unwrap_or(0);
+
+    let thumbnail_url = item
+        .pointer("/thumbnail/musicThumbnailRenderer/thumbnail/thumbnails")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.last())
+        .and_then(|t| t.get("url"))
+        .and_then(|u| u.as_str())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| format!("https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"));
+
+    Some(TrackMetadata {
+        video_id,
+        title,
+        artist,
+        album: None,
+        duration_sec,
+        thumbnail_url,
+    })
+}
+
 /// Live Innertube HTTP write API using user's stored YTM cookie/authorization header.
 pub struct InnertubeYtmWriteApi {
     http: reqwest::Client,
@@ -137,14 +294,20 @@ impl InnertubeYtmWriteApi {
         body: serde_json::Value,
     ) -> Result<serde_json::Value, AppError> {
         let url = format!("https://music.youtube.com/youtubei/v1/{endpoint}?alt=json");
-        let resp = self
+        let mut req = self
             .http
             .post(url)
             .header("Cookie", credential)
+            .header("Origin", "https://music.youtube.com")
             .header("X-Origin", "https://music.youtube.com")
-            .json(&body)
-            .send()
-            .await?;
+            .header("X-Goog-AuthUser", "0");
+
+        if let Some(sapisid) = extract_sapisid(credential) {
+            let ts = chrono::Utc::now().timestamp();
+            req = req.header("Authorization", build_sapisidhash(&sapisid, ts));
+        }
+
+        let resp = req.json(&body).send().await?;
 
         if resp.status() == reqwest::StatusCode::UNAUTHORIZED
             || resp.status() == reqwest::StatusCode::FORBIDDEN
@@ -184,8 +347,10 @@ impl YtmWriteApi for InnertubeYtmWriteApi {
             "browseId": "FEmusic_liked_videos",
             "context": { "client": { "clientName": "WEB_REMIX", "clientVersion": "1.20240101.01.00" } }
         });
-        let _ = self.post_browse_or_action("browse", credential, body).await?;
-        Ok(Vec::new())
+        let val = self.post_browse_or_action("browse", credential, body).await?;
+        let mut items = Vec::new();
+        collect_renderers(&val, "musicResponsiveListItemRenderer", &mut items);
+        Ok(items.into_iter().filter_map(parse_responsive_track).collect())
     }
 
     async fn create_playlist(&self, credential: &str, title: &str) -> Result<String, AppError> {
@@ -277,8 +442,56 @@ impl YtmWriteApi for InnertubeYtmWriteApi {
             "browseId": "FEmusic_liked_playlists",
             "context": { "client": { "clientName": "WEB_REMIX", "clientVersion": "1.20240101.01.00" } }
         });
-        let _ = self.post_browse_or_action("browse", credential, body).await?;
-        Ok(Vec::new())
+        let val = self.post_browse_or_action("browse", credential, body).await?;
+        let mut cards = Vec::new();
+        collect_renderers(&val, "musicTwoRowItemRenderer", &mut cards);
+
+        let mut playlists = Vec::new();
+        for card in cards {
+            let browse_id = card
+                .pointer("/navigationEndpoint/browseEndpoint/browseId")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            if browse_id.is_empty() || browse_id == "VLLM" || browse_id == "VLSE" {
+                continue;
+            }
+            let ytm_playlist_id = browse_id.strip_prefix("VL").unwrap_or(browse_id).to_string();
+            let name = card
+                .pointer("/title/runs/0/text")
+                .and_then(|v| v.as_str())
+                .unwrap_or("YouTube Music Playlist")
+                .to_string();
+
+            // Fetch tracks inside this playlist
+            let pl_body = serde_json::json!({
+                "browseId": browse_id,
+                "context": { "client": { "clientName": "WEB_REMIX", "clientVersion": "1.20240101.01.00" } }
+            });
+            let tracks = match self.post_browse_or_action("browse", credential, pl_body).await {
+                Ok(pl_val) => {
+                    let mut rows = Vec::new();
+                    collect_renderers(&pl_val, "musicResponsiveListItemRenderer", &mut rows);
+                    rows.into_iter()
+                        .filter_map(|row| {
+                            let track = parse_responsive_track(row)?;
+                            let set_video_id = row
+                                .pointer("/playlistItemData/playlistSetVideoId")
+                                .and_then(|v| v.as_str())
+                                .map(ToOwned::to_owned);
+                            Some(RemoteYtmTrack { track, set_video_id })
+                        })
+                        .collect()
+                }
+                Err(_) => Vec::new(),
+            };
+
+            playlists.push(RemoteYtmPlaylist {
+                ytm_playlist_id,
+                name,
+                tracks,
+            });
+        }
+        Ok(playlists)
     }
 }
 
@@ -343,6 +556,27 @@ impl SyncEngine {
         self.creds.delete_secret(YTM_CREDENTIAL_KEY)?;
         self.emit("idle", None);
         Ok(())
+    }
+
+    /// Returns whether a YTM credential is stored and how many local changes await sync.
+    pub async fn account_status(&self) -> Result<YtmAccountStatus, AppError> {
+        let connected = self.creds.load_secret(YTM_CREDENTIAL_KEY)?.is_some();
+        let pending_likes: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM liked_songs WHERE sync_status IN ('pending_push', 'pending_delete')",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let pending_playlists: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM playlists WHERE sync_status IN ('pending_push', 'pending_delete')",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        Ok(YtmAccountStatus {
+            connected,
+            pending_sync_count: pending_likes + pending_playlists,
+        })
     }
 
     /// Toggles liked status locally in SQLite and pushes to YTM if connected.
